@@ -80,6 +80,12 @@ ul{padding:0;list-style:none}
 .form-note{font-size:13px;font-weight:700;margin-top:12px;min-height:1px}
 .form-small{font-size:12px;margin-top:10px;opacity:.8}
 
+/* quote / name-your-price toggle */
+.mode-toggle{display:flex;gap:4px;background:rgba(23,24,29,.08);border:2px solid var(--ink);border-radius:999px;padding:4px;margin-top:16px}
+.mode-btn{flex:1;border:0;background:transparent;border-radius:999px;padding:10px 8px;font:800 13.5px/1 Archivo,system-ui,sans-serif;color:var(--ink);cursor:pointer;transition:background-color .15s ease,color .15s ease}
+.mode-btn.is-active{background:var(--ink);color:var(--yellow)}
+.mode-btn:not(.is-active):hover{background:rgba(23,24,29,.12)}
+
 /* trust band */
 .trust{background:var(--yellow);color:var(--ink)}
 .trust ul{display:grid;grid-template-columns:repeat(4,auto);justify-content:space-between;gap:10px 24px;padding:16px 0}
@@ -228,6 +234,10 @@ section[id],form[id]{scroll-margin-top:84px}
       <form class="quote" id="quote" novalidate>
         <h2 class="display">Get your price</h2>
         <p>Takes about a minute. Free and no obligation.</p>
+        <div class="mode-toggle" role="tablist" aria-label="How would you like to do this?">
+          <button type="button" class="mode-btn is-active" data-mode="quote" role="tab" aria-selected="true">Get a quote</button>
+          <button type="button" class="mode-btn" data-mode="price" role="tab" aria-selected="false">Tell your price</button>
+        </div>
         <div class="row2">
           <label>Moving from (postcode)
             <input id="q-from" name="from" placeholder="e.g. SE15" autocomplete="postal-code" required>
@@ -254,7 +264,7 @@ section[id],form[id]{scroll-margin-top:84px}
         <label>Tell us a bit more
           <textarea id="q-items" name="items" rows="2" placeholder="e.g. 2-bed flat, 2nd floor, no lift, one large painting" required></textarea>
         </label>
-        <label>Your budget <small>(optional)</small>
+        <label><span id="q-budget-text">Your budget <small>(optional)</small></span>
           <span class="pound">£<input id="q-budget" type="number" name="budget" inputmode="numeric" min="1" step="1" placeholder="0"></span>
         </label>
         <div class="row2">
@@ -265,9 +275,9 @@ section[id],form[id]{scroll-margin-top:84px}
             <input id="q-phone" type="tel" name="phone" autocomplete="tel" required>
           </label>
         </div>
-        <button class="btn btn-dark" type="submit">Get my quote</button>
+        <button class="btn btn-dark" type="submit" id="q-submit">Get my quote</button>
         <p class="form-note" role="status" aria-live="polite"></p>
-        <p class="form-small">We reply with one clear price for the whole job.</p>
+        <p class="form-small" id="q-help">We reply with one clear price for the whole job.</p>
       </form>
     </div>
   </section>
@@ -501,6 +511,43 @@ section[id],form[id]{scroll-margin-top:84px}
   var pad = function (n) { return String(n).padStart(2, '0'); };
   date.min = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
   document.getElementById('year').textContent = now.getFullYear();
+
+  // Quote / name-your-price toggle
+  var modeBtns = form.querySelectorAll('.mode-btn');
+  var budgetText = document.getElementById('q-budget-text');
+  var budgetInput = document.getElementById('q-budget');
+  var submitBtn = document.getElementById('q-submit');
+  var help = document.getElementById('q-help');
+  var modeCopy = {
+    quote: {
+      budget: 'Your budget <small>(optional)</small>',
+      required: false,
+      submit: 'Get my quote',
+      help: 'We reply with one clear price for the whole job.'
+    },
+    price: {
+      budget: 'Your price <small>(what you want to pay)</small>',
+      required: true,
+      submit: 'Send my price',
+      help: 'Tell us your number — we’ll say yes, or come back with our best price.'
+    }
+  };
+  var setMode = function (mode) {
+    form.dataset.mode = mode;
+    modeBtns.forEach(function (btn) {
+      var active = btn.dataset.mode === mode;
+      btn.classList.toggle('is-active', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    budgetText.innerHTML = modeCopy[mode].budget;
+    budgetInput.required = modeCopy[mode].required;
+    submitBtn.textContent = modeCopy[mode].submit;
+    help.textContent = modeCopy[mode].help;
+  };
+  modeBtns.forEach(function (btn) {
+    btn.addEventListener('click', function () { setMode(btn.dataset.mode); });
+  });
+  setMode('quote');
 
   // On a github.io address the page is a draft: say so, and keep it out of search results.
   if (/\.github\.io$/.test(location.hostname)) {
