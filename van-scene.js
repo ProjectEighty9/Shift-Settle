@@ -1,5 +1,6 @@
 // Interactive 3D scene: the Shift & Settle van, back doors open, parked in a storage unit.
-// Everything is built from boxes and cylinders in code, so there are no model files to download.
+// Physically based materials, image-based lighting and rounded edges, all generated in code:
+// there are no model or texture files to download.
 
 const host = document.getElementById('unit3d');
 
@@ -20,18 +21,27 @@ if (host) {
 }
 
 async function build(host) {
-  const THREE = await import('three');
-  const { OrbitControls } = await import('three/addons/controls/OrbitControls.js');
+  const [THREE, { OrbitControls }, { RoomEnvironment }, { RoundedBoxGeometry }, { RectAreaLightUniformsLib }] = await Promise.all([
+    import('three'),
+    import('three/addons/controls/OrbitControls.js'),
+    import('three/addons/environments/RoomEnvironment.js'),
+    import('three/addons/geometries/RoundedBoxGeometry.js'),
+    import('three/addons/lights/RectAreaLightUniformsLib.js')
+  ]);
+  RectAreaLightUniformsLib.init();
   try { await document.fonts.load('900 80px Archivo'); } catch (e) { /* the fallback font is fine */ }
 
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const lowEnd = matchMedia('(pointer: coarse)').matches || Math.min(screen.width, screen.height) < 700;
   const INK = 0x17181d;
 
   // ---------- renderer, scene, camera ----------
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, lowEnd ? 1.75 : 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.25;
   const canvas = renderer.domElement;
   canvas.setAttribute('role', 'img');
   canvas.setAttribute('aria-label', 'A 3D view of the Shift and Settle van in a storage unit, back doors open, with a trolley of boxes beside it. Drag to look around.');
@@ -40,6 +50,9 @@ async function build(host) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(INK);
   scene.fog = new THREE.Fog(INK, 18, 38);
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  scene.environmentIntensity = 0.8;
 
   const camera = new THREE.PerspectiveCamera(40, 16 / 9, 0.1, 80);
   camera.position.set(5.2, 3.0, 7.4);
@@ -57,7 +70,7 @@ async function build(host) {
   controls.autoRotateSpeed = 0.55;
   canvas.style.touchAction = 'pan-y';
 
-  // ---------- small helpers ----------
+  // ---------- helpers ----------
   const rng = (seed) => () => {
     seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
     let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
@@ -69,20 +82,30 @@ async function build(host) {
   const cache = {};
   const M = (color, o = {}) => (cache[color + JSON.stringify(o)] ??= mat(color, o));
 
-  const canvasTexture = (w, h, draw, rx = 1, ry = 1, repeat = true) => {
+  const canvasTexture = (w, h, draw, rx = 1, ry = 1, repeat = true, data = false) => {
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
     draw(c.getContext('2d'), w, h);
     const t = new THREE.CanvasTexture(c);
-    t.colorSpace = THREE.SRGBColorSpace;
-    t.anisotropy = 4;
+    t.colorSpace = data ? THREE.NoColorSpace : THREE.SRGBColorSpace;
+    t.anisotropy = lowEnd ? 4 : 8;
     if (repeat) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); }
     return t;
   };
+  const asData = (tex, rx = tex.repeat.x, ry = tex.repeat.y) => {
+    const t = tex.clone();
+    t.colorSpace = THREE.NoColorSpace;
+    t.repeat.set(rx, ry);
+    t.needsUpdate = true;
+    return t;
+  };
 
-  // A box centred on (x, y, z). `material` can be an array of six for per-face colours.
-  const box = (w, h, d, material, x = 0, y = 0, z = 0, parent = scene, shadows = true) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+  // A box centred on (x, y, z) with softly rounded edges. `material` can be an array of six.
+  const box = (w, h, d, material, x = 0, y = 0, z = 0, parent = scene, shadows = true, radius) => {
+    const min = Math.min(w, h, d);
+    const r = radius ?? Math.min(0.02, min * 0.4);
+    const geo = min < 0.03 || r < 0.004 ? new THREE.BoxGeometry(w, h, d) : new RoundedBoxGeometry(w, h, d, 3, Math.min(r, min / 2.1));
+    const m = new THREE.Mesh(geo, material);
     m.position.set(x, y, z);
     m.castShadow = shadows;
     m.receiveShadow = true;
@@ -90,7 +113,7 @@ async function build(host) {
     return m;
   };
 
-  const cyl = (rTop, rBottom, h, material, x, y, z, parent = scene, seg = 20) => {
+  const cyl = (rTop, rBottom, h, material, x, y, z, parent = scene, seg = 24) => {
     const m = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBottom, h, seg), material);
     m.position.set(x, y, z);
     m.castShadow = true;
@@ -99,72 +122,234 @@ async function build(host) {
     return m;
   };
 
+  // soft dark patch under things so they sit on the floor
+  const blobTex = canvasTexture(128, 128, (ctx, w, h) => {
+    const g = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+    g.addColorStop(0, 'rgba(0,0,0,0.6)'); g.addColorStop(0.55, 'rgba(0,0,0,0.28)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+  }, 1, 1, false);
+  const contact = (x, z, w, d, o = 1, ry = 0) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshBasicMaterial({ map: blobTex, transparent: true, depthWrite: false, opacity: o }));
+    m.rotation.x = -Math.PI / 2;
+    m.rotation.z = ry;
+    m.position.set(x, 0.006, z);
+    m.renderOrder = 1;
+    scene.add(m);
+  };
+
+  // ---------- surface textures ----------
+  const cardTex = canvasTexture(256, 256, (ctx, w, h) => {
+    const r = rng(3);
+    ctx.fillStyle = '#efefef'; ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 3500; i++) {
+      ctx.fillStyle = `rgba(60,40,20,${0.04 + r() * 0.08})`;
+      ctx.fillRect(r() * w, r() * h, 1 + r() * 3, 1);
+    }
+    for (let x = 0; x < w; x += 8) { ctx.fillStyle = 'rgba(0,0,0,0.035)'; ctx.fillRect(x, 0, 3, h); }
+  });
+  const cardBump = asData(cardTex);
+  const cardMats = {};
+  const cardMat = (color) => (cardMats[color] ??= new THREE.MeshStandardMaterial({ color, map: cardTex, bumpMap: cardBump, bumpScale: 1.5, roughness: 0.93 }));
+  const tapeMat = M('#d8c38a', { roughness: 0.28, metalness: 0.05 });
+  const redTape = M('#b32525', { roughness: 0.3 });
+
+  const labelWords = ['KITCHEN', 'BOOKS', 'BEDROOM', 'OFFICE', 'GLASSES', 'TOYS', 'ART', 'LOUNGE'];
+  const labelCache = {};
+  const labelTex = (kind) => (labelCache[kind] ??= canvasTexture(256, 128, (ctx, w, h) => {
+    ctx.clearRect(0, 0, w, h);
+    if (kind === 'FRAGILE') {
+      ctx.fillStyle = '#c62c2c'; ctx.fillRect(10, 22, w - 20, h - 44);
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = '900 46px Archivo, Arial, sans-serif';
+      ctx.fillText('FRAGILE', w / 2, h / 2 + 2);
+    } else if (kind === 'ARROWS') {
+      ctx.fillStyle = '#1b1b1f';
+      [64, 192].forEach((x) => { ctx.beginPath(); ctx.moveTo(x, 12); ctx.lineTo(x + 34, 62); ctx.lineTo(x + 12, 62); ctx.lineTo(x + 12, 116); ctx.lineTo(x - 12, 116); ctx.lineTo(x - 12, 62); ctx.lineTo(x - 34, 62); ctx.closePath(); ctx.fill(); });
+    } else {
+      ctx.save(); ctx.translate(w / 2, h / 2); ctx.rotate(-0.05);
+      ctx.fillStyle = '#16161a'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = 'italic 900 52px Archivo, Arial, sans-serif';
+      ctx.fillText(kind, 0, 0);
+      ctx.restore();
+    }
+  }, 1, 1, false));
+  const labelMat = (kind) => (cache['label' + kind] ??= new THREE.MeshStandardMaterial({ map: labelTex(kind), transparent: true, roughness: 0.8, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
+
+  const lr = rng(99);
   const cardboard = ['#c4965f', '#b98b5a', '#a97c4d', '#d1a46f', '#bd9160'];
-  const carton = (w, h, d, color, parent, x, y, z, ry = 0) => {
+  const carton = (w, h, d, color, parent, x, y, z, ry = 0, labels = true) => {
     const g = new THREE.Group();
-    box(w, h, d, M(color, { roughness: 0.92 }), 0, 0, 0, g);
-    box(0.07, h + 0.006, d + 0.006, M('#e9d9b0', { roughness: 0.6 }), 0, 0, 0, g, false);
+    box(w, h, d, cardMat(color), 0, 0, 0, g, true, 0.012);
+    box(0.07, h + 0.008, d + 0.008, tapeMat, 0, 0, 0, g, false, 0.003);
+    if (labels) {
+      const place = (kind, s, px, py, pz, rot) => {
+        const p = new THREE.Mesh(new THREE.PlaneGeometry(s, s / 2), labelMat(kind));
+        p.position.set(px, py, pz); p.rotation.y = rot; g.add(p);
+      };
+      const faces = [[d / 2 + 0.002, 0, w], [-d / 2 - 0.002, Math.PI, w]];
+      faces.forEach(([pz, rot, span]) => {
+        if (lr() < 0.75) {
+          const s = Math.min(span * 0.62, 0.34);
+          const word = labelWords[Math.floor(lr() * labelWords.length)];
+          place(lr() < 0.2 ? 'FRAGILE' : word, s, (lr() - 0.5) * span * 0.25 + (span > 0.4 ? 0.1 : 0), (lr() - 0.5) * h * 0.3, pz, rot);
+          if (h > 0.34 && lr() < 0.5) place('ARROWS', s * 0.5, -span * 0.28, -h * 0.28, pz, rot);
+        }
+      });
+    }
     g.position.set(x, y, z);
     g.rotation.y = ry;
     parent.add(g);
     return g;
   };
 
+  const woodTex = canvasTexture(256, 256, (ctx, w, h) => {
+    const r = rng(11);
+    ctx.fillStyle = '#e6d2ad'; ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 160; i++) {
+      ctx.strokeStyle = `rgba(90,55,20,${0.05 + r() * 0.12})`; ctx.lineWidth = 0.6 + r() * 1.6;
+      const y = r() * h; ctx.beginPath(); ctx.moveTo(0, y);
+      ctx.bezierCurveTo(w * 0.3, y + (r() - 0.5) * 6, w * 0.6, y + (r() - 0.5) * 6, w, y + (r() - 0.5) * 4);
+      ctx.stroke();
+    }
+    for (let i = 0; i < 4; i++) {
+      const x = r() * w, y = r() * h;
+      ctx.strokeStyle = 'rgba(80,45,15,0.3)'; ctx.lineWidth = 1.4;
+      for (let k = 1; k < 4; k++) { ctx.beginPath(); ctx.ellipse(x, y, 5 * k, 2.2 * k, 0, 0, Math.PI * 2); ctx.stroke(); }
+    }
+  });
+  const woodBump = asData(woodTex);
+  const wood = (color) => (cache['wood' + color] ??= new THREE.MeshStandardMaterial({ color, map: woodTex, bumpMap: woodBump, bumpScale: 1, roughness: 0.85 }));
+
+  const quiltTex = canvasTexture(256, 256, (ctx, w, h) => {
+    ctx.fillStyle = '#f1f1f1'; ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = 'rgba(40,40,50,0.55)'; ctx.lineWidth = 2.5;
+    for (let i = -h; i < w + h; i += 32) {
+      ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i + h, h); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(i, h); ctx.lineTo(i + h, 0); ctx.stroke();
+    }
+    const r = rng(5);
+    for (let i = 0; i < 2500; i++) { ctx.fillStyle = `rgba(0,0,0,${r() * 0.06})`; ctx.fillRect(r() * w, r() * h, 2, 2); }
+  }, 2, 2);
+  const quiltBump = asData(quiltTex);
+  const quilt = (color) => (cache['quilt' + color] ??= new THREE.MeshStandardMaterial({ color, map: quiltTex, bumpMap: quiltBump, bumpScale: 2.2, roughness: 0.96 }));
+
+  const bubbleTex = canvasTexture(128, 128, (ctx, w, h) => {
+    ctx.fillStyle = '#808080'; ctx.fillRect(0, 0, w, h);
+    for (let y = 8; y < h; y += 16) for (let x = 8 + ((y / 16) % 2) * 8; x < w; x += 16) {
+      const g = ctx.createRadialGradient(x - 2, y - 2, 1, x, y, 7);
+      g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#505050');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.fill();
+    }
+  }, 3, 3, true, true);
+
   // ---------- materials ----------
-  const paint = M('#f4f5f7', { roughness: 0.42, metalness: 0.08 });
-  const inner = M('#cdd0d6', { roughness: 0.85 });
-  const yellow = M('#ffc21a', { roughness: 0.5 });
-  const darkBand = M('#33363e', { roughness: 0.7 });
-  const glass = M('#1d2430', { roughness: 0.12, metalness: 0.4 });
-  const steel = M('#2b2d33', { roughness: 0.55, metalness: 0.5 });
-  const rubber = M('#15161a', { roughness: 0.95 });
-  const alloy = M('#c9ccd2', { roughness: 0.35, metalness: 0.6 });
-  const plywood = M('#b99768', { roughness: 0.9 });
-  const glow = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff3d1, emissiveIntensity: 2.2 });
+  const paint = new THREE.MeshPhysicalMaterial({ color: '#f1f2f4', roughness: 0.3, metalness: 0.05, clearcoat: 1, clearcoatRoughness: 0.08 });
+  const inner = M('#c9ccd2', { roughness: 0.8 });
+  const yellow = new THREE.MeshPhysicalMaterial({ color: '#ffc21a', roughness: 0.35, clearcoat: 0.8, clearcoatRoughness: 0.1 });
+  const darkBand = M('#2e3036', { roughness: 0.6 });
+  const trim = M('#101114', { roughness: 0.55 });
+  const glass = new THREE.MeshPhysicalMaterial({ color: '#0b1118', roughness: 0.04, metalness: 0.85, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 });
+  const steel = M('#30333a', { roughness: 0.45, metalness: 0.7 });
+  const chrome = M('#d8dbe0', { roughness: 0.12, metalness: 1 });
+  const rubber = M('#17181b', { roughness: 0.92 });
+  const alloy = M('#b9bdc4', { roughness: 0.3, metalness: 0.9 });
+  const glow = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff1d6, emissiveIntensity: 2.4 });
+  const lamp = (c, e, i) => new THREE.MeshPhysicalMaterial({ color: c, emissive: e, emissiveIntensity: i, roughness: 0.1, clearcoat: 1 });
 
   // ---------- room ----------
-  const floorTex = canvasTexture(512, 512, (ctx, w, h) => {
+  const floorColor = canvasTexture(2048, 2048, (ctx, w, h) => {
     const r = rng(7);
-    ctx.fillStyle = '#4c4f57'; ctx.fillRect(0, 0, w, h);
-    for (let i = 0; i < 9000; i++) {
-      ctx.fillStyle = r() > 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.07)';
-      ctx.fillRect(r() * w, r() * h, 1 + r() * 2, 1 + r() * 2);
+    ctx.fillStyle = '#5a5d64'; ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 420; i++) {
+      const x = r() * w, y = r() * h, rad = 40 + r() * 220;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
+      g.addColorStop(0, r() > 0.5 ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.05)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g; ctx.fillRect(x - rad, y - rad, rad * 2, rad * 2);
     }
-    ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 1;
-    ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
-  }, 5, 5);
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(10.4, 9.4), new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.9 }));
+    for (let i = 0; i < 40000; i++) { ctx.fillStyle = r() > 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)'; ctx.fillRect(r() * w, r() * h, 1 + r() * 2, 1 + r() * 2); }
+    [w / 3, (2 * w) / 3].forEach((x) => { ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(x - 2, 0, 4, h); ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(x + 2, 0, 2, h); });
+    [h / 3, (2 * h) / 3].forEach((y) => { ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(0, y - 2, w, 4); ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(0, y + 2, w, 2); });
+    ctx.lineCap = 'round';
+    [-0.95, 0.95].forEach((wx) => {
+      const x = ((wx + 5.2) / 10.4) * w;
+      ctx.strokeStyle = 'rgba(0,0,0,0.16)'; ctx.lineWidth = 34;
+      ctx.beginPath(); ctx.moveTo(x, h); ctx.bezierCurveTo(x + 40, h * 0.8, x - 30, h * 0.7, x, h * 0.55); ctx.stroke();
+    });
+    for (let i = 0; i < 9; i++) {
+      const x = r() * w, y = h * (0.45 + r() * 0.5), rad = 20 + r() * 50;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
+      g.addColorStop(0, 'rgba(10,10,12,0.4)'); g.addColorStop(1, 'rgba(10,10,12,0)');
+      ctx.fillStyle = g; ctx.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+    }
+  });
+  const floorRough = canvasTexture(512, 512, (ctx, w, h) => {
+    const r = rng(13);
+    ctx.fillStyle = 'rgb(160,160,160)'; ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 140; i++) {
+      const x = r() * w, y = r() * h, rad = 20 + r() * 90;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
+      g.addColorStop(0, r() > 0.5 ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.25)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g; ctx.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+    }
+    for (let i = 0; i < 6000; i++) { ctx.fillStyle = `rgba(${r() > 0.5 ? 255 : 0},${r() > 0.5 ? 255 : 0},0,0.05)`; ctx.fillRect(r() * w, r() * h, 1, 1); }
+  }, 1, 1, false, true);
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(10.4, 9.4),
+    new THREE.MeshStandardMaterial({ map: floorColor, roughnessMap: floorRough, roughness: 1, bumpMap: floorRough, bumpScale: 0.6, metalness: 0 })
+  );
   floor.rotation.x = -Math.PI / 2;
   floor.position.set(0, 0, 0.3);
   floor.receiveShadow = true;
   scene.add(floor);
 
-  const wallTex = canvasTexture(256, 64, (ctx, w, h) => {
-    ctx.fillStyle = '#6d717b'; ctx.fillRect(0, 0, w, h);
-    const n = 8;
-    for (let i = 0; i < n; i++) {
-      const g = ctx.createLinearGradient(i * (w / n), 0, (i + 1) * (w / n), 0);
-      g.addColorStop(0, 'rgba(255,255,255,0.16)');
-      g.addColorStop(0.5, 'rgba(0,0,0,0.0)');
-      g.addColorStop(1, 'rgba(0,0,0,0.22)');
-      ctx.fillStyle = g; ctx.fillRect(i * (w / n), 0, w / n, h);
+  const wallColor = (seed) => canvasTexture(2048, 512, (ctx, w, h) => {
+    const r = rng(seed);
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, '#9ca2ac'); g.addColorStop(1, '#6e737c');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+    for (let i = 0; i < 260; i++) {
+      const x = r() * w, sw = 2 + r() * 12, sh = 120 + r() * 380;
+      const gr = ctx.createLinearGradient(0, 0, 0, sh);
+      gr.addColorStop(0, `rgba(20,20,24,${0.05 + r() * 0.08})`); gr.addColorStop(1, 'rgba(20,20,24,0)');
+      ctx.fillStyle = gr; ctx.fillRect(x, 0, sw, sh);
     }
-  }, 11, 1);
-  const backWall = new THREE.Mesh(new THREE.PlaneGeometry(10.4, 3.4), new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.75, metalness: 0.15 }));
+    const gb = ctx.createLinearGradient(0, h - 150, 0, h);
+    gb.addColorStop(0, 'rgba(10,10,12,0)'); gb.addColorStop(1, 'rgba(10,10,12,0.5)');
+    ctx.fillStyle = gb; ctx.fillRect(0, h - 150, w, 150);
+  }, 1, 1, false);
+  const ribNormal = canvasTexture(256, 4, (ctx, w, h) => {
+    for (let x = 0; x < w; x++) {
+      const dh = Math.cos((x / 32) * Math.PI * 2) * 0.9;
+      const len = Math.hypot(dh, 1);
+      ctx.fillStyle = `rgb(${Math.round((-dh / len * 0.5 + 0.5) * 255)},128,${Math.round((1 / len * 0.5 + 0.5) * 255)})`;
+      ctx.fillRect(x, 0, 1, h);
+    }
+  }, 17, 1, true, true);
+  const wallMat = (len, seed) => {
+    const nm = ribNormal.clone();
+    nm.repeat.set(len / 0.6, 1);
+    nm.needsUpdate = true;
+    return new THREE.MeshStandardMaterial({ map: wallColor(seed), normalMap: nm, normalScale: new THREE.Vector2(1.2, 1.2), roughness: 0.55, metalness: 0.45 });
+  };
+  const backWall = new THREE.Mesh(new THREE.PlaneGeometry(10.4, 3.4), wallMat(10.4, 31));
   backWall.position.set(0, 1.7, -4.4);
   backWall.receiveShadow = true;
   scene.add(backWall);
-  const sideTex = wallTex.clone();
-  sideTex.needsUpdate = true;
-  sideTex.repeat.set(10, 1);
-  const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(9.4, 3.4), new THREE.MeshStandardMaterial({ map: sideTex, roughness: 0.75, metalness: 0.15 }));
+  const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(9.4, 3.4), wallMat(9.4, 47));
   leftWall.rotation.y = Math.PI / 2;
   leftWall.position.set(-5.2, 1.7, 0.3);
   leftWall.receiveShadow = true;
   scene.add(leftWall);
 
-  box(10.4, 0.16, 0.08, M('#25272d'), 0, 0.08, -4.36, scene, false);
-  box(0.08, 0.16, 9.4, M('#25272d'), -5.16, 0.08, 0.3, scene, false);
+  box(10.4, 0.18, 0.1, M('#22242a', { roughness: 0.6 }), 0, 0.09, -4.35, scene, false);
+  box(0.1, 0.18, 9.4, M('#22242a', { roughness: 0.6 }), -5.15, 0.09, 0.3, scene, false);
+  // conduit and a junction box along the wall
+  cyl(0.025, 0.025, 10.2, steel, 0, 2.95, -4.36, scene, 10).rotation.z = Math.PI / 2;
+  cyl(0.025, 0.025, 9.2, steel, -5.16, 2.95, 0.3, scene, 10).rotation.x = Math.PI / 2;
+  box(0.22, 0.28, 0.1, M('#cfd2d6', { roughness: 0.5, metalness: 0.4 }), 2.6, 2.7, -4.34);
+  // steel column in the corner, with hazard stripes
+  box(0.32, 3.4, 0.32, M('#2a2d33', { roughness: 0.5, metalness: 0.6 }), -5.0, 1.7, -4.2);
+  for (let i = 0; i < 4; i++) box(0.33, 0.12, 0.33, i % 2 ? M('#101114') : yellow, -5.0, 0.13 + i * 0.13, -4.2, scene, false, 0.004);
 
   // unit number sign
   const signTex = canvasTexture(512, 192, (ctx, w, h) => {
@@ -174,37 +359,39 @@ async function build(host) {
     ctx.font = '900 104px Archivo, Arial, sans-serif';
     ctx.fillText('UNIT 14', w / 2, h / 2 + 6);
   }, 1, 1, false);
-  const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.525), new THREE.MeshStandardMaterial({ map: signTex, roughness: 0.5 }));
-  sign.position.set(0, 2.85, -4.36);
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.525), new THREE.MeshStandardMaterial({ map: signTex, roughness: 0.4, metalness: 0.2 }));
+  sign.position.set(0, 2.85, -4.34);
   scene.add(sign);
 
   // floor markings round the van's bay
-  const line = M('#ffc21a', { roughness: 0.6 });
-  box(0.1, 0.006, 7.2, line, -1.7, 0.004, 0.1, scene, false);
-  box(0.1, 0.006, 7.2, line, 1.7, 0.004, 0.1, scene, false);
-  box(3.5, 0.006, 0.1, line, 0, 0.004, 3.7, scene, false);
+  const paintLine = M('#e8b410', { roughness: 0.5 });
+  box(0.1, 0.006, 7.2, paintLine, -1.7, 0.004, 0.1, scene, false);
+  box(0.1, 0.006, 7.2, paintLine, 1.7, 0.004, 0.1, scene, false);
+  box(3.5, 0.006, 0.1, paintLine, 0, 0.004, 3.7, scene, false);
 
   // ceiling beams and strip lights
-  [-2.4, 0.9, 4.0].forEach((z) => box(10.4, 0.2, 0.2, M('#25272d'), 0, 3.45, z, scene, false));
+  [-2.4, 0.9, 4.0].forEach((z) => box(10.4, 0.22, 0.2, M('#202228', { roughness: 0.5, metalness: 0.5 }), 0, 3.45, z, scene, false));
   [-1.0, 2.2].forEach((z) => {
     box(2.0, 0.07, 0.2, glow, 0, 3.0, z, scene, false);
-    [-0.8, 0.8].forEach((x) => cyl(0.01, 0.01, 0.45, steel, x, 3.23, z, scene, 6));
+    box(2.06, 0.03, 0.26, steel, 0, 3.05, z, scene, false);
+    [-0.8, 0.8].forEach((x) => cyl(0.008, 0.008, 0.4, steel, x, 3.25, z, scene, 6));
   });
 
   // ---------- lights ----------
-  scene.add(new THREE.HemisphereLight(0xdfe6ff, 0x3a3f4a, 0.85));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.35);
+  scene.add(new THREE.HemisphereLight(0xdfe6ff, 0x3a3f4a, 0.35));
+  const sun = new THREE.DirectionalLight(0xfff4e6, 1.5);
   sun.position.set(5, 9, 6);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(lowEnd ? 1024 : 2048, lowEnd ? 1024 : 2048);
   Object.assign(sun.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 0.5, far: 30 });
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 0.03;
   scene.add(sun);
-  [[0, 2.7, -1.0], [0, 2.7, 2.2]].forEach(([x, y, z]) => {
-    const p = new THREE.PointLight(0xffeccb, 16, 11, 2);
-    p.position.set(x, y, z);
-    scene.add(p);
+  [-1.0, 2.2].forEach((z) => {
+    const l = new THREE.RectAreaLight(0xfff1dc, 11, 2.0, 0.2);
+    l.position.set(0, 2.95, z);
+    l.lookAt(0, 0, z);
+    scene.add(l);
   });
 
   // ---------- the van ----------
@@ -212,31 +399,79 @@ async function build(host) {
   van.position.set(0, 0, -0.3);
   scene.add(van);
 
+  // chassis, so nothing looks hollow between the wheels
+  box(1.9, 0.22, 5.1, M('#16171a', { roughness: 0.8 }), 0, 0.4, -0.45, van, false);
+
+  // cab and bonnet: one body with a raked windscreen
+  const cab = new THREE.Shape();
+  cab.moveTo(0.9, 0.5); cab.lineTo(3.0, 0.5); cab.lineTo(3.08, 0.62); cab.lineTo(3.1, 1.0);
+  cab.quadraticCurveTo(3.1, 1.2, 2.9, 1.24); cab.lineTo(2.5, 1.34); cab.lineTo(1.95, 2.34);
+  cab.quadraticCurveTo(1.9, 2.5, 1.7, 2.5); cab.lineTo(0.9, 2.5); cab.closePath();
+  const cabGeo = new THREE.ExtrudeGeometry(cab, { depth: 1.88, bevelEnabled: true, bevelThickness: 0.06, bevelSize: 0.06, bevelSegments: 4, curveSegments: 14 });
+  cabGeo.rotateY(Math.PI / 2);
+  cabGeo.translate(-0.94, 0, 0);
+  const cabMesh = new THREE.Mesh(cabGeo, paint);
+  cabMesh.castShadow = true; cabMesh.receiveShadow = true;
+  van.add(cabMesh);
+
+  const windscreen = box(1.74, 1.0, 0.02, glass, 0, 1.897, -2.256, van, false, 0.004);
+  windscreen.rotation.x = 0.5028;
+  const sideGlass = new THREE.Shape();
+  sideGlass.moveTo(1.05, 1.62); sideGlass.lineTo(1.05, 2.28); sideGlass.lineTo(1.88, 2.28); sideGlass.lineTo(2.2, 1.62); sideGlass.closePath();
+  const sideGeo = new THREE.ShapeGeometry(sideGlass);
+  sideGeo.rotateY(Math.PI / 2);
+
+  // cargo area: hollow, with the rear open
   const wallPanel = (side) => {
     const faces = side < 0 ? [inner, paint, paint, paint, paint, paint] : [paint, inner, paint, paint, paint, paint];
     box(0.06, 2.0, 3.0, faces, side * 0.97, 1.5, 0.6, van);
   };
   wallPanel(-1); wallPanel(1);
   box(2.0, 0.06, 3.0, [paint, paint, paint, inner, paint, paint], 0, 2.47, 0.6, van);
-  box(1.94, 0.06, 3.0, [inner, inner, plywood, M('#2b2d33'), inner, inner], 0, 0.53, 0.6, van);
-  box(2.0, 2.0, 1.4, paint, 0, 1.5, -1.6, van);               // cab
-  box(1.96, 0.9, 0.8, paint, 0, 0.95, -2.7, van);              // bonnet
-  box(2.0, 0.24, 0.2, darkBand, 0, 0.42, -3.12, van);          // front bumper
-  box(1.0, 0.34, 0.03, M('#0e0f12'), 0, 0.95, -3.11, van);     // grille
+  box(1.94, 0.06, 3.0, [inner, inner, wood('#cfa970'), M('#2b2d33'), inner, inner], 0, 0.53, 0.6, van);
+  // inside: plywood lining low down, ribs, a tie-down rail
   [-1, 1].forEach((s) => {
-    box(0.34, 0.17, 0.05, new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xdfe8ff, emissiveIntensity: 1.2 }), s * 0.72, 1.1, -3.1, van, false);
-    box(0.04, 0.78, 1.05, glass, s * 1.01, 1.95, -1.55, van);  // cab side windows
-    box(0.05, 0.05, 0.22, steel, s * 1.025, 1.6, -0.95, van);  // door handles
-    box(0.1, 0.45, 0.05, new THREE.MeshStandardMaterial({ color: 0xc02a2a, emissive: 0xff2a2a, emissiveIntensity: 0.6 }), s * 0.93, 1.05, 2.13, van, false); // tail lights
+    box(0.02, 1.0, 2.94, wood('#c7a26b'), s * 0.925, 1.05, 0.6, van, false, 0.004);
+    for (let z = -0.55; z <= 1.9; z += 0.62) box(0.03, 1.9, 0.07, M('#aeb2ba', { roughness: 0.6 }), s * 0.935, 1.5, z, van, false, 0.008);
+    box(0.02, 0.035, 2.9, steel, s * 0.92, 1.45, 0.6, van, false, 0.004);
   });
-  box(1.8, 0.86, 0.04, glass, 0, 1.95, -2.31, van);            // windscreen
-  box(2.0, 0.22, 0.2, darkBand, 0, 0.4, 2.2, van);             // rear bumper
-  box(0.5, 0.13, 0.02, M('#f6e27a'), 0, 0.46, 2.311, van, false); // number plate
+  box(1.6, 0.025, 0.14, glow, 0, 2.43, 0.6, van, false, 0.004);
 
-  // body bands
+  // front end
+  box(1.98, 0.28, 0.24, darkBand, 0, 0.43, -3.14, van);                  // bumper
+  box(1.1, 0.26, 0.03, trim, 0, 1.0, -3.16, van, false);                  // grille
+  [-0.2, -0.1, 0, 0.1, 0.2].forEach((dy) => box(1.06, 0.012, 0.012, steel, 0, 1.0 + dy * 0.9, -3.175, van, false, 0.003));
+  cyl(0.07, 0.07, 0.018, chrome, 0, 1.0, -3.175, van, 24).rotation.x = Math.PI / 2;
+  box(1.2, 0.12, 0.03, trim, 0, 0.62, -3.15, van, false);                // lower intake
   [-1, 1].forEach((s) => {
-    box(0.02, 0.28, 4.4, yellow, s * 1.011, 1.2, -0.1, van, false);
-    box(0.02, 0.25, 4.4, darkBand, s * 1.011, 0.65, -0.1, van, false);
+    box(0.4, 0.17, 0.06, lamp('#e9eef7', '#cfe0ff', 0.8), s * 0.7, 1.12, -3.12, van, false, 0.03);     // headlamps
+    box(0.14, 0.06, 0.05, lamp('#ff9d1c', '#ff8a00', 0.7), s * 0.93, 1.12, -3.1, van, false, 0.02);     // indicators
+    box(0.16, 0.12, 0.04, lamp('#e9eef7', '#ffffff', 0.5), s * 0.85, 0.66, -3.15, van, false, 0.02);     // fog lamps
+    // cab side window, handle, mirror
+    const sg = new THREE.Mesh(sideGeo, glass);
+    sg.position.x = s * 1.004;
+    van.add(sg);
+    box(0.05, 0.05, 0.24, chrome, s * 1.03, 1.55, -0.98, van, false, 0.02);
+    box(0.012, 1.55, 0.012, trim, s * 1.006, 1.38, -0.97, van, false);          // door shut lines
+    box(0.012, 1.0, 0.012, trim, s * 1.006, 1.38, -2.1, van, false);
+    box(0.012, 0.012, 1.15, trim, s * 1.006, 0.82, -1.55, van, false);
+    box(0.1, 0.26, 0.2, trim, s * 1.2, 1.92, -2.0, van, true, 0.04);
+    box(0.2, 0.03, 0.03, trim, s * 1.08, 1.85, -1.98, van, false);
+    box(0.01, 0.2, 0.15, glass, s * 1.145, 1.92, -2.0, van, false);
+    // tail lamps and reflectors
+    box(0.1, 0.46, 0.05, lamp('#b01f1f', '#ff2a2a', 0.5), s * 0.93, 1.05, 2.13, van, false, 0.02);
+    box(0.1, 0.1, 0.04, M('#d84a1b', { roughness: 0.2 }), s * 0.93, 0.74, 2.13, van, false, 0.015);
+  });
+  // wipers
+  [-0.55, 0.15].forEach((x) => { const w = box(0.02, 0.62, 0.012, trim, x, 1.7, -2.27, van, false); w.rotation.x = 0.5028; w.rotation.z = -0.5; });
+
+  box(2.0, 0.22, 0.2, darkBand, 0, 0.4, 2.2, van);                         // rear bumper / step
+  box(0.5, 0.13, 0.02, M('#f6df6b', { roughness: 0.3 }), 0, 0.46, 2.31, van, false, 0.005); // number plate
+
+  // body bands and cab-door chequered kick strip
+  [-1, 1].forEach((s) => {
+    box(0.02, 0.28, 4.4, yellow, s * 1.011, 1.2, -0.1, van, false, 0.004);
+    box(0.02, 0.25, 4.4, darkBand, s * 1.011, 0.65, -0.1, van, false, 0.004);
   });
 
   // livery
@@ -264,25 +499,46 @@ async function build(host) {
   [-1, 1].forEach((s) => {
     const p = new THREE.Mesh(
       new THREE.PlaneGeometry(2.85, 0.916),
-      new THREE.MeshStandardMaterial({ map: liveryTex, transparent: true, roughness: 0.5, polygonOffset: true, polygonOffsetFactor: -2 })
+      new THREE.MeshPhysicalMaterial({ map: liveryTex, transparent: true, roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.1, polygonOffset: true, polygonOffsetFactor: -2 })
     );
     p.rotation.y = s * Math.PI / 2;
     p.position.set(s * 1.0125, 1.9, 0.6);
     van.add(p);
   });
 
-  // wheels
+  // wheels: treaded tyre, steel wheel with lug nuts
+  const treadTex = canvasTexture(128, 128, (ctx, w, h) => {
+    ctx.fillStyle = '#4a4a4a'; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#f0f0f0';
+    for (let x = 0; x < w; x += 16) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + 10, 0); ctx.lineTo(x + 14, h / 2); ctx.lineTo(x + 4, h / 2); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x + 8, h / 2); ctx.lineTo(x + 18, h / 2); ctx.lineTo(x + 14, h); ctx.lineTo(x + 4, h); ctx.closePath(); ctx.fill();
+    }
+  }, 28, 1, true, true);
+  const treadMat = new THREE.MeshStandardMaterial({ color: '#17181b', roughness: 0.95, bumpMap: treadTex, bumpScale: 3 });
+  const archMat = M('#0c0d0f', { roughness: 0.9 });
   [-1.9, 1.3].forEach((z) => [-1, 1].forEach((s) => {
     const w = new THREE.Group();
     w.position.set(s * 1.0, 0.4, z);
     w.rotation.z = Math.PI / 2;
-    cyl(0.4, 0.4, 0.3, rubber, 0, 0, 0, w, 28);
-    cyl(0.23, 0.23, 0.32, alloy, 0, 0, 0, w, 20);
-    cyl(0.09, 0.09, 0.34, steel, 0, 0, 0, w, 12);
+    const tyre = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.3, 40), [treadMat, rubber, rubber]);
+    tyre.castShadow = true; tyre.receiveShadow = true;
+    w.add(tyre);
+    cyl(0.27, 0.27, 0.31, alloy, 0, 0, 0, w, 32);
+    cyl(0.2, 0.2, 0.32, M('#9aa0a8', { roughness: 0.4, metalness: 0.8 }), 0, 0, 0, w, 32);
+    cyl(0.08, 0.08, 0.34, chrome, 0, 0, 0, w, 20);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      cyl(0.022, 0.022, 0.335, steel, Math.cos(a) * 0.14, 0, Math.sin(a) * 0.14, w, 8);
+    }
     van.add(w);
-    const arch = cyl(0.47, 0.47, 0.03, M('#0e0f12'), s * 1.0, 0.4, z, van, 28);
+    const arch = cyl(0.47, 0.47, 0.03, archMat, s * 1.0, 0.4, z, van, 32);
     arch.rotation.z = Math.PI / 2;
     arch.castShadow = false;
+    const lip = new THREE.Mesh(new THREE.TorusGeometry(0.48, 0.022, 8, 40), trim);
+    lip.rotation.y = Math.PI / 2;
+    lip.position.set(s * 1.012, 0.4, z);
+    van.add(lip);
   }));
 
   // rear doors, swung wide open
@@ -293,10 +549,12 @@ async function build(host) {
     const door = new THREE.Group();
     door.position.x = -s * 0.485;
     hinge.add(door);
-    box(0.97, 1.92, 0.06, paint, 0, 1.51, 0, door);
-    box(0.97, 0.28, 0.07, yellow, 0, 1.2, 0, door, false);
-    box(0.5, 0.5, 0.07, glass, 0, 1.95, 0, door, false);
-    box(0.05, 0.2, 0.1, steel, -s * 0.38, 1.5, 0.04, door, false);
+    box(0.97, 1.92, 0.06, [paint, paint, paint, paint, paint, inner], 0, 1.51, 0, door);
+    box(0.97, 0.28, 0.01, yellow, 0, 1.2, 0.036, door, false, 0.002);
+    box(0.5, 0.5, 0.01, glass, 0, 1.95, 0.036, door, false, 0.002);
+    box(0.04, 0.22, 0.04, chrome, -s * 0.38, 1.5, 0.05, door, false, 0.012);
+    [0.75, 1.5, 2.2].forEach((y) => box(0.05, 0.12, 0.08, steel, s * 0.46, y, -0.01, door, false, 0.01));
+    box(0.012, 1.9, 0.012, trim, -s * 0.485, 1.51, 0.03, door, false);
     van.add(hinge);
   });
 
@@ -308,68 +566,92 @@ async function build(host) {
   carton(0.8, 0.6, 0.6, cardboard[3], load, 0.45, 0.86, -0.45);
   carton(0.6, 0.55, 0.5, cardboard[2], load, 0.45, 1.43, -0.45, -0.1);
   carton(0.75, 0.55, 0.6, cardboard[4], load, 0.45, 0.83, 0.25);
-  box(0.9, 0.45, 0.7, M('#4b5260', { roughness: 0.95 }), -0.45, 0.78, 0.35, load);  // blanket-wrapped piece
-  box(0.92, 0.03, 0.12, yellow, -0.45, 1.01, 0.35, load, false);                     // strap
-  const vanLight = new THREE.PointLight(0xfff0d6, 1.4, 4.5, 2);
+  box(0.9, 0.45, 0.7, quilt('#4b5668'), -0.45, 0.78, 0.35, load, true, 0.07);          // blanket-wrapped piece
+  box(0.92, 0.035, 0.1, M('#e0a30c', { roughness: 0.5 }), -0.45, 1.02, 0.35, load, false, 0.004);
+  box(0.92, 0.035, 0.1, M('#e0a30c', { roughness: 0.5 }), -0.45, 1.02, 0.6, load, false, 0.004);
+  box(0.1, 0.07, 0.06, chrome, -0.02, 1.03, 0.47, load, false, 0.01);
+  const vanLight = new THREE.PointLight(0xfff0d6, 1.2, 4.5, 2);
   vanLight.position.set(0, 2.2, 0.8);
   van.add(vanLight);
+
+  contact(0, -0.4, 2.7, 6.2, 0.9);
 
   // ---------- sack truck with boxes, beside the back door ----------
   const truck = new THREE.Group();
   truck.position.set(2.1, 0, 3.0);
-  truck.rotation.y = -0.45;
+  truck.rotation.y = 3.785;
   scene.add(truck);
-  [-0.2, 0.2].forEach((x) => box(0.04, 1.3, 0.04, steel, x, 0.75, 0.02, truck));
-  [0.35, 0.8].forEach((y) => box(0.44, 0.035, 0.035, steel, 0, y, 0.02, truck));
-  const grip = cyl(0.022, 0.022, 0.5, yellow, 0, 1.4, 0.02, truck, 12);
+  const frameMat = new THREE.MeshPhysicalMaterial({ color: '#ffc21a', roughness: 0.4, metalness: 0.3, clearcoat: 0.6, clearcoatRoughness: 0.2 });
+  [-0.2, 0.2].forEach((x) => cyl(0.016, 0.016, 1.3, frameMat, x, 0.75, 0.02, truck, 12));
+  [0.35, 0.8].forEach((y) => { const c = cyl(0.012, 0.012, 0.4, frameMat, 0, y, 0.02, truck, 10); c.rotation.z = Math.PI / 2; });
+  const grip = cyl(0.026, 0.026, 0.46, rubber, 0, 1.42, 0.02, truck, 14);
   grip.rotation.z = Math.PI / 2;
-  [-0.2, 0.2].forEach((x) => box(0.04, 0.04, 0.04, steel, x, 1.4, 0.02, truck));
-  box(0.44, 0.025, 0.36, steel, 0, 0.04, -0.17, truck);                                // toe plate
+  [-0.2, 0.2].forEach((x) => cyl(0.018, 0.018, 0.06, frameMat, x, 1.38, 0.02, truck, 10));
+  box(0.44, 0.02, 0.36, steel, 0, 0.04, -0.17, truck);                                  // toe plate
   [-0.27, 0.27].forEach((x) => {
-    const wh = cyl(0.11, 0.11, 0.06, rubber, x, 0.11, 0.04, truck, 20);
-    wh.rotation.z = Math.PI / 2;
+    const tyre = cyl(0.115, 0.115, 0.06, rubber, x, 0.115, 0.04, truck, 24);
+    tyre.rotation.z = Math.PI / 2;
+    const hub = cyl(0.05, 0.05, 0.07, alloy, x, 0.115, 0.04, truck, 16);
+    hub.rotation.z = Math.PI / 2;
   });
-  carton(0.5, 0.4, 0.4, cardboard[0], truck, 0, 0.265, -0.2);
-  carton(0.46, 0.36, 0.36, cardboard[3], truck, 0.01, 0.645, -0.2, 0.05);
-  carton(0.4, 0.3, 0.32, cardboard[2], truck, -0.01, 0.975, -0.2, -0.06);
-  box(0.035, 1.08, 0.01, yellow, 0, 0.62, -0.41, truck, false);                        // strap
+  const axle = cyl(0.01, 0.01, 0.6, steel, 0, 0.115, 0.04, truck, 8);
+  axle.rotation.z = Math.PI / 2;
+  carton(0.5, 0.4, 0.4, cardboard[0], truck, 0, 0.255, -0.2);
+  carton(0.46, 0.36, 0.36, cardboard[3], truck, 0.01, 0.635, -0.2, 0.05);
+  carton(0.4, 0.3, 0.32, cardboard[2], truck, -0.01, 0.965, -0.2, -0.06);
+  box(0.04, 1.1, 0.01, M('#e0a30c', { roughness: 0.5 }), 0, 0.62, -0.405, truck, false, 0.002);   // ratchet strap
+  box(0.08, 0.06, 0.03, chrome, 0.0, 0.7, -0.42, truck, false, 0.008);
+  contact(2.1, 3.0, 1.0, 1.0, 0.8);
 
   // flat four-wheel dolly with moving blankets, on the other side
   const dolly = new THREE.Group();
   dolly.position.set(-2.5, 0, 3.2);
   dolly.rotation.y = 0.35;
   scene.add(dolly);
-  box(1.0, 0.07, 0.62, M('#6a4a2b', { roughness: 0.9 }), 0, 0.2, 0, dolly);
+  box(1.0, 0.07, 0.62, wood('#8a5f3a'), 0, 0.2, 0, dolly);
   [[-0.42, -0.25], [0.42, -0.25], [-0.42, 0.25], [0.42, 0.25]].forEach(([x, z]) => {
-    const c = cyl(0.06, 0.06, 0.05, rubber, x, 0.08, z, dolly, 14);
+    const c = cyl(0.065, 0.065, 0.05, rubber, x, 0.075, z, dolly, 18);
     c.rotation.z = Math.PI / 2;
+    cyl(0.012, 0.012, 0.06, steel, x, 0.15, z, dolly, 8);
   });
-  box(0.9, 0.12, 0.54, M('#4b5260', { roughness: 0.95 }), 0, 0.29, 0, dolly);
-  box(0.9, 0.1, 0.54, M('#b86a2d', { roughness: 0.95 }), 0.02, 0.4, 0, dolly);
-  box(0.9, 0.1, 0.54, M('#4b5260', { roughness: 0.95 }), -0.02, 0.5, 0, dolly);
+  box(0.9, 0.12, 0.54, quilt('#4b5668'), 0, 0.29, 0, dolly, true, 0.04);
+  box(0.9, 0.1, 0.54, quilt('#b86a2d'), 0.02, 0.4, 0, dolly, true, 0.04);
+  box(0.9, 0.1, 0.54, quilt('#4b5668'), -0.02, 0.5, 0, dolly, true, 0.04);
+  contact(-2.5, 3.2, 1.5, 1.0, 0.8, -0.35);
 
   // ---------- shelving along the back wall ----------
   const r = rng(21);
+  const upright = M('#262a33', { roughness: 0.45, metalness: 0.65 });
+  const beam = new THREE.MeshPhysicalMaterial({ color: '#f0a30a', roughness: 0.45, metalness: 0.25, clearcoat: 0.4 });
+  const tub = new THREE.MeshPhysicalMaterial({ color: '#3b3e46', roughness: 0.35, clearcoat: 0.5, clearcoatRoughness: 0.3 });
+  const tubLid = new THREE.MeshPhysicalMaterial({ color: '#5a5e69', roughness: 0.35, clearcoat: 0.5, clearcoatRoughness: 0.3 });
   const shelfBay = (x0) => {
     const seg = 1.7, z = -4.05;
-    [0, 1, 2].forEach((i) => [-0.29, 0.29].forEach((dz) => box(0.07, 2.6, 0.07, steel, x0 + i * seg, 1.3, z + dz)));
+    [0, 1, 2].forEach((i) => [-0.29, 0.29].forEach((dz) => box(0.07, 2.6, 0.07, upright, x0 + i * seg, 1.3, z + dz, scene, true, 0.01)));
     [0.1, 0.85, 1.6, 2.35].forEach((top) => {
       [0, 1].forEach((i) => {
         const sx = x0 + i * seg;
-        box(seg - 0.07, 0.07, 0.6, yellow, sx + seg / 2, top - 0.035, z);
+        box(seg - 0.07, 0.07, 0.6, beam, sx + seg / 2, top - 0.035, z, scene, true, 0.012);
+        box(seg - 0.09, 0.022, 0.58, wood('#d9bd8c'), sx + seg / 2, top + 0.011, z, scene, false, 0.004);
         let cursor = sx + 0.1;
         while (cursor < sx + seg - 0.35) {
           if (r() < 0.12) { cursor += 0.3; continue; }
           const w = 0.25 + r() * 0.3, h = 0.2 + r() * 0.38, d = 0.3 + r() * 0.24;
           if (cursor + w > sx + seg - 0.08) break;
           const k = r();
-          const px = cursor + w / 2, py = top + h / 2, pz = z + (r() - 0.5) * 0.06;
+          const px = cursor + w / 2, py = top + 0.022 + h / 2, pz = z + (r() - 0.5) * 0.06;
           if (k < 0.18) {
-            box(w, h, d, M('#3b3e46', { roughness: 0.6 }), px, py, pz);
-            box(w + 0.02, 0.04, d + 0.02, M('#5a5e69', { roughness: 0.6 }), px, py + h / 2 + 0.02, pz);
-          } else if (k < 0.34) {
-            box(w, h, d, M('#e6e7ea', { roughness: 0.85 }), px, py, pz);
-            box(0.06, h + 0.006, d + 0.006, M('#ffc21a'), px, py, pz, scene, false);
+            box(w, h, d, tub, px, py, pz, scene, true, 0.03);
+            box(w + 0.02, 0.04, d + 0.02, tubLid, px, py + h / 2 + 0.02, pz, scene, true, 0.015);
+          } else if (k < 0.26) {
+            const can = cyl(0.09, 0.09, 0.14, M('#c9ccd2', { roughness: 0.3, metalness: 0.9 }), px, top + 0.022 + 0.07, pz, scene, 20);
+            can.userData.can = true;
+            cyl(0.075, 0.075, 0.02, M('#2c6fb3', { roughness: 0.4 }), px, top + 0.022 + 0.15, pz, scene, 20);
+            cursor += 0.14;
+            continue;
+          } else if (k < 0.4) {
+            box(w, h, d, M('#e6e7ea', { roughness: 0.8 }), px, py, pz, scene, true, 0.012);
+            box(0.06, h + 0.008, d + 0.008, tapeMat, px, py, pz, scene, false, 0.003);
           } else {
             carton(w, h, d, cardboard[Math.floor(r() * cardboard.length)], scene, px, py, pz);
           }
@@ -377,56 +659,100 @@ async function build(host) {
         }
       });
     });
+    [-0.29, 0.29].forEach((dz) => [0, 1, 2].forEach((i) => box(0.2, 0.012, 0.2, steel, x0 + i * seg, 0.006, z + dz, scene, false, 0.003)));
   };
   shelfBay(1.5);
   shelfBay(-4.9);
+  contact(3.2, -4.05, 3.9, 1.0, 0.7);
+  contact(-3.2, -4.05, 3.9, 1.0, 0.7);
 
   // fire extinguisher by the sign
-  cyl(0.08, 0.08, 0.45, M('#c02a2a', { roughness: 0.4 }), -1.15, 1.15, -4.3);
-  cyl(0.03, 0.03, 0.1, steel, -1.15, 1.42, -4.3, scene, 10);
+  const extMat = new THREE.MeshPhysicalMaterial({ color: '#c02a2a', roughness: 0.35, clearcoat: 0.8 });
+  cyl(0.08, 0.08, 0.45, extMat, -1.15, 1.15, -4.28);
+  cyl(0.03, 0.03, 0.1, steel, -1.15, 1.43, -4.28, scene, 10);
+  box(0.2, 0.03, 0.06, steel, -1.15, 1.3, -4.34, scene, false, 0.006);
+  box(0.3, 0.3, 0.01, M('#c02a2a', { roughness: 0.4 }), -1.15, 1.7, -4.36, scene, false, 0.002);
 
   // ---------- clutter along the left wall ----------
-  const mattress = box(0.18, 1.9, 1.0, M('#e8e4da', { roughness: 0.95 }), -4.9, 0.96, 1.6);
+  const mattressWrap = new THREE.MeshPhysicalMaterial({ color: '#ffffff', transparent: true, opacity: 0.14, roughness: 0.15, clearcoat: 1, depthWrite: false });
+  const mattress = box(0.2, 1.9, 1.0, quilt('#f3efe6'), -4.9, 0.96, 1.6, scene, true, 0.06);
   mattress.rotation.z = 0.1;
-  box(0.2, 0.04, 1.02, yellow, -4.88, 0.9, 1.6, scene, false).rotation.z = 0.1;
-  const carpet = cyl(0.17, 0.17, 2.0, M('#7a4b3a', { roughness: 1 }), -4.85, 1.0, 2.55);
+  const mWrap = box(0.23, 1.93, 1.03, mattressWrap, -4.9, 0.96, 1.6, scene, false, 0.07);
+  mWrap.rotation.z = 0.1;
+  const carpetSide = new THREE.MeshStandardMaterial({ color: '#7a4b3a', roughness: 1, bumpMap: bubbleTex, bumpScale: 0.4 });
+  const carpetCap = new THREE.MeshStandardMaterial({ color: '#6b4030', roughness: 1 });
+  const carpet = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 2.0, 32), [carpetSide, carpetCap, carpetCap]);
+  carpet.position.set(-4.85, 1.0, 2.55);
   carpet.rotation.z = 0.08;
+  carpet.castShadow = true; carpet.receiveShadow = true;
+  scene.add(carpet);
+  [0.6, -0.6].forEach((dy) => { const t = cyl(0.176, 0.176, 0.04, tapeMat, -4.85 + dy * -0.08, 1.0 + dy, 2.55, scene, 28); t.rotation.z = 0.08; });
+  // crate for a painting: planed timber with stencilled lettering
+  const crate = new THREE.Group();
+  crate.position.set(-4.93, 0, 0.35);
+  crate.rotation.z = 0.12;
+  crate.rotation.y = 0.04;
+  scene.add(crate);
+  box(0.16, 1.4, 1.1, wood('#c8a574'), 0, 0.72, 0, crate);
+  [-0.5, 0, 0.5].forEach((z) => box(0.2, 1.42, 0.07, wood('#b8935f'), 0.01, 0.72, z, crate, true, 0.008));
+  [0.05, 1.4].forEach((y) => box(0.2, 0.07, 1.14, wood('#b8935f'), 0.01, y, 0, crate, true, 0.008));
+  const stencil = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.3), new THREE.MeshStandardMaterial({
+    map: canvasTexture(256, 110, (ctx, w, h) => {
+      ctx.clearRect(0, 0, w, h); ctx.fillStyle = '#1b1b1f'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = '900 58px Archivo, Arial, sans-serif'; ctx.fillText('ART', w / 2, 36);
+      ctx.font = '800 30px Archivo, Arial, sans-serif'; ctx.fillText('HANDLE WITH CARE', w / 2, 84);
+    }, 1, 1, false), transparent: true, roughness: 0.9, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2
+  }));
+  stencil.rotation.y = Math.PI / 2;
+  stencil.position.set(0.105, 0.8, 0);
+  crate.add(stencil);
+  // bubble-wrapped frames
+  const wrapMat = new THREE.MeshPhysicalMaterial({ color: '#eaf2f7', transparent: true, opacity: 0.55, roughness: 0.2, bumpMap: bubbleTex, bumpScale: 2, clearcoat: 1, depthWrite: false });
+  [[-4.7, 0.9, 0.75, 0.095], [-4.75, 0.7, 0.55, 0.085]].forEach(([x, h, w, tilt], i) => {
+    const f = box(0.04, h, w, M('#2a2018', { roughness: 0.6 }), x, h / 2, -0.95 + i * 0.4, scene);
+    f.rotation.z = tilt;
+    const wr = box(0.07, h + 0.04, w + 0.04, wrapMat, x, h / 2, -0.95 + i * 0.4, scene, false, 0.02);
+    wr.rotation.z = tilt;
+  });
   const sofa = new THREE.Group();
   sofa.position.set(-4.0, 0, 3.0);
   sofa.rotation.y = 0.06;
   scene.add(sofa);
-  const blanket = M('#4b5260', { roughness: 0.95 });
-  box(0.95, 0.45, 1.9, blanket, 0, 0.3, 0, sofa);
-  box(0.26, 0.6, 1.9, blanket, -0.35, 0.75, 0, sofa);
-  box(0.95, 0.5, 0.22, blanket, 0, 0.55, -0.84, sofa);
-  box(0.95, 0.5, 0.22, blanket, 0, 0.55, 0.84, sofa);
-  [-0.4, 0.4].forEach((z) => box(0.99, 0.5, 0.045, M('#2b2d33'), 0, 0.33, z, sofa, false));
-  const broomStick = cyl(0.015, 0.015, 1.55, M('#a0805a'), -5.02, 0.78, -0.7, scene, 8);
+  const blanket = quilt('#4b5668');
+  box(0.95, 0.45, 1.9, blanket, 0, 0.3, 0, sofa, true, 0.1);
+  box(0.26, 0.6, 1.9, blanket, -0.35, 0.75, 0, sofa, true, 0.1);
+  box(0.95, 0.5, 0.22, blanket, 0, 0.55, -0.84, sofa, true, 0.1);
+  box(0.95, 0.5, 0.22, blanket, 0, 0.55, 0.84, sofa, true, 0.1);
+  [-0.4, 0.4].forEach((z) => box(0.99, 0.5, 0.045, M('#d99a0c', { roughness: 0.5 }), 0, 0.33, z, sofa, false, 0.01));
+  contact(-4.0, 3.0, 1.6, 2.4, 0.8);
+  const broomStick = cyl(0.014, 0.014, 1.55, wood('#b08a58'), -5.02, 0.78, -1.3, scene, 8);
   broomStick.rotation.z = 0.06;
-  box(0.06, 0.05, 0.32, M('#2b2d33'), -4.93, 0.04, -0.7);
+  box(0.06, 0.05, 0.32, M('#2b2d33'), -4.93, 0.04, -1.3, scene, true, 0.012);
 
   // ---------- pallet stack and tubs on the right ----------
   const pallet = new THREE.Group();
   pallet.position.set(3.7, 0, 2.2);
   pallet.rotation.y = 0.12;
   scene.add(pallet);
-  const wood = M('#a98558', { roughness: 0.95 });
-  [-0.4, 0, 0.4].forEach((x) => [-0.4, 0, 0.4].forEach((z) => box(0.14, 0.1, 0.14, wood, x, 0.07, z, pallet)));
-  [-0.45, -0.22, 0, 0.22, 0.45].forEach((z) => box(1.2, 0.025, 0.14, wood, 0, 0.14, z, pallet));
-  [-0.4, 0, 0.4].forEach((x) => box(0.14, 0.025, 1.2, wood, x, 0.0125, 0, pallet));
+  const timber = wood('#b8935f');
+  [-0.4, 0, 0.4].forEach((x) => [-0.4, 0, 0.4].forEach((z) => box(0.14, 0.1, 0.14, timber, x, 0.07, z, pallet, true, 0.008)));
+  [-0.45, -0.22, 0, 0.22, 0.45].forEach((z) => box(1.2, 0.025, 0.14, timber, 0, 0.14, z, pallet, true, 0.006));
+  [-0.4, 0, 0.4].forEach((x) => box(0.14, 0.025, 1.2, timber, x, 0.0125, 0, pallet, true, 0.006));
   carton(0.55, 0.45, 0.5, cardboard[0], pallet, -0.3, 0.39, -0.25);
   carton(0.55, 0.45, 0.5, cardboard[1], pallet, 0.3, 0.39, -0.25, 0.04);
   carton(0.55, 0.45, 0.5, cardboard[4], pallet, -0.3, 0.39, 0.3);
   carton(0.55, 0.45, 0.5, cardboard[2], pallet, 0.3, 0.39, 0.3, -0.05);
   carton(0.5, 0.4, 0.5, cardboard[3], pallet, -0.28, 0.82, -0.25, 0.1);
   carton(0.5, 0.4, 0.5, cardboard[0], pallet, 0.3, 0.82, 0.3, -0.08);
-  const wrap = box(1.22, 1.0, 1.22, new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.1, roughness: 0.2, depthWrite: false }), 0, 0.64, 0, pallet, false);
+  const wrap = box(1.22, 1.0, 1.22, new THREE.MeshPhysicalMaterial({ color: 0xffffff, transparent: true, opacity: 0.12, roughness: 0.08, clearcoat: 1, depthWrite: false }), 0, 0.64, 0, pallet, false, 0.05);
   wrap.receiveShadow = false;
+  contact(3.7, 2.2, 1.9, 1.9, 0.85, 0.12);
 
   [[3.1, 3.9, 0.1], [3.15, 3.9, -0.15]].forEach(([x, z, ry], i) => {
-    box(0.6, 0.38, 0.4, M('#3b3e46', { roughness: 0.6 }), x, 0.19 + i * 0.4, z).rotation.y = ry;
-    box(0.62, 0.04, 0.42, M('#5a5e69', { roughness: 0.6 }), x, 0.4 + i * 0.4, z).rotation.y = ry;
+    box(0.6, 0.38, 0.4, tub, x, 0.19 + i * 0.4, z, scene, true, 0.04).rotation.y = ry;
+    box(0.62, 0.04, 0.42, tubLid, x, 0.4 + i * 0.4, z, scene, true, 0.02).rotation.y = ry;
   });
+  contact(3.1, 3.9, 1.0, 0.8, 0.8);
 
   // ---------- controls, resize, loop ----------
   const fit = () => {
