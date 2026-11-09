@@ -21,12 +21,13 @@ if (host) {
 }
 
 async function build(host) {
-  const [THREE, { OrbitControls }, { RoomEnvironment }, { RoundedBoxGeometry }, { RectAreaLightUniformsLib }] = await Promise.all([
+  const [THREE, { OrbitControls }, { RoomEnvironment }, { RoundedBoxGeometry }, { RectAreaLightUniformsLib }, { GLTFLoader }] = await Promise.all([
     import('three'),
     import('three/addons/controls/OrbitControls.js'),
     import('three/addons/environments/RoomEnvironment.js'),
     import('three/addons/geometries/RoundedBoxGeometry.js'),
-    import('three/addons/lights/RectAreaLightUniformsLib.js')
+    import('three/addons/lights/RectAreaLightUniformsLib.js'),
+    import('three/addons/loaders/GLTFLoader.js')
   ]);
   RectAreaLightUniformsLib.init();
   try { await document.fonts.load('900 80px Archivo'); } catch (e) { /* the fallback font is fine */ }
@@ -69,6 +70,30 @@ async function build(host) {
   controls.maxPolarAngle = 1.48;
   controls.autoRotateSpeed = 0.55;
   canvas.style.touchAction = 'pan-y';
+
+  // ---------- photo-scanned CC0 assets (Poly Haven); each falls back to a procedural stand-in ----------
+  const base = new URL('assets/', import.meta.url).href;
+  const gltfLoader = new GLTFLoader();
+  const texLoader = new THREE.TextureLoader();
+  const attempt = async (fn) => { try { return await fn(); } catch (e) { console.warn('asset skipped:', e); return null; } };
+  const loadPBR = async (id) => {
+    const [map, normalMap, roughnessMap] = await Promise.all(['Diffuse', 'nor_gl', 'Rough'].map((k) => texLoader.loadAsync(`${base}textures/${id}_${k}.jpg`)));
+    map.colorSpace = THREE.SRGBColorSpace;
+    [map, normalMap, roughnessMap].forEach((t) => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = lowEnd ? 4 : 8; });
+    return { map, normalMap, roughnessMap };
+  };
+  const pbrMaterial = (t, rx, ry, extra = {}) => {
+    [t.map, t.normalMap, t.roughnessMap].forEach((x) => x.repeat.set(rx, ry));
+    return new THREE.MeshStandardMaterial({ map: t.map, normalMap: t.normalMap, roughnessMap: t.roughnessMap, roughness: 1, ...extra });
+  };
+  const [boxGltf, truckGltf, shelfGltf, floorScan, wallScan] = await Promise.all([
+    attempt(() => gltfLoader.loadAsync(base + 'models/cardboard_box_01/cardboard_box_01_1k.gltf')),
+    attempt(() => gltfLoader.loadAsync(base + 'models/hand_truck/hand_truck_1k.gltf')),
+    attempt(() => gltfLoader.loadAsync(base + 'models/steel_frame_shelves_01/steel_frame_shelves_01_1k.gltf')),
+    attempt(() => loadPBR('concrete_floor_worn_001')),
+    attempt(() => loadPBR('corrugated_iron_03'))
+  ]);
+  const castAll = (obj) => obj.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
 
   // ---------- helpers ----------
   const rng = (seed) => () => {
@@ -177,10 +202,27 @@ async function build(host) {
 
   const lr = rng(99);
   const cardboard = ['#c4965f', '#b98b5a', '#a97c4d', '#d1a46f', '#bd9160'];
+  // the scanned box is 0.387 x 0.342 x 0.516 m, base at y=0; tinted copies give some variety
+  const scanTints = ['#ffffff', '#f1e3cd', '#e0c8a4', '#fff1dc', '#e8d3b2'];
+  let scanMats = null;
+  if (boxGltf) {
+    let src;
+    boxGltf.scene.traverse((o) => { if (o.isMesh) src = o.material; });
+    scanMats = scanTints.map((c) => { const m = src.clone(); m.color = new THREE.Color(c); return m; });
+  }
   const carton = (w, h, d, color, parent, x, y, z, ry = 0, labels = true) => {
     const g = new THREE.Group();
-    box(w, h, d, cardMat(color), 0, 0, 0, g, true, 0.012);
-    box(0.07, h + 0.008, d + 0.008, tapeMat, 0, 0, 0, g, false, 0.003);
+    if (scanMats) {
+      const body = boxGltf.scene.clone(true);
+      body.traverse((o) => { if (o.isMesh) { o.material = scanMats[Math.max(0, cardboard.indexOf(color)) % scanMats.length]; o.castShadow = true; o.receiveShadow = true; } });
+      const sx = w / 0.387, sy = h / 0.342, sz = d / 0.516;
+      body.scale.set(sx, sy, sz);
+      body.position.set(0, -h / 2, -0.028 * sz);
+      g.add(body);
+    } else {
+      box(w, h, d, cardMat(color), 0, 0, 0, g, true, 0.012);
+      box(0.07, h + 0.008, d + 0.008, tapeMat, 0, 0, 0, g, false, 0.003);
+    }
     if (labels) {
       const place = (kind, s, px, py, pz, rot) => {
         const p = new THREE.Mesh(new THREE.PlaneGeometry(s, s / 2), labelMat(kind));
@@ -301,6 +343,33 @@ async function build(host) {
   floor.position.set(0, 0, 0.3);
   floor.receiveShadow = true;
   scene.add(floor);
+  if (floorScan) {
+    // scanned concrete in 2 m tiles, with slab joints, tyre tracks and stains laid over it
+    floor.material = pbrMaterial(floorScan, 3.5, 3.1, { color: '#8e9096', normalScale: new THREE.Vector2(2.2, 2.2) });
+    const wear = canvasTexture(2048, 2048, (ctx, w, h) => {
+      const r = rng(17);
+      ctx.clearRect(0, 0, w, h);
+      [w / 3, (2 * w) / 3].forEach((x) => { ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(x - 2, 0, 4, h); });
+      [h / 3, (2 * h) / 3].forEach((y) => { ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, y - 2, w, 4); });
+      ctx.lineCap = 'round';
+      [-0.95, 0.95].forEach((wx) => {
+        const x = ((wx + 5.2) / 10.4) * w;
+        ctx.strokeStyle = 'rgba(0,0,0,0.22)'; ctx.lineWidth = 34;
+        ctx.beginPath(); ctx.moveTo(x, h); ctx.bezierCurveTo(x + 40, h * 0.8, x - 30, h * 0.7, x, h * 0.55); ctx.stroke();
+      });
+      for (let i = 0; i < 9; i++) {
+        const x = r() * w, y = h * (0.45 + r() * 0.5), rad = 20 + r() * 50;
+        const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
+        g.addColorStop(0, 'rgba(10,10,12,0.5)'); g.addColorStop(1, 'rgba(10,10,12,0)');
+        ctx.fillStyle = g; ctx.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+      }
+    }, 1, 1, false);
+    const wearPlane = new THREE.Mesh(new THREE.PlaneGeometry(10.4, 9.4), new THREE.MeshStandardMaterial({ map: wear, transparent: true, roughness: 0.9, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1 }));
+    wearPlane.rotation.x = -Math.PI / 2;
+    wearPlane.position.set(0, 0.002, 0.3);
+    wearPlane.receiveShadow = true;
+    scene.add(wearPlane);
+  }
 
   const wallColor = (seed) => canvasTexture(2048, 512, (ctx, w, h) => {
     const r = rng(seed);
@@ -340,6 +409,15 @@ async function build(host) {
   leftWall.position.set(-5.2, 1.7, 0.3);
   leftWall.receiveShadow = true;
   scene.add(leftWall);
+  if (wallScan) {
+    const scanWall = (len) => {
+      const c = { map: wallScan.map.clone(), normalMap: wallScan.normalMap.clone(), roughnessMap: wallScan.roughnessMap.clone() };
+      Object.values(c).forEach((t) => { t.needsUpdate = true; });
+      return pbrMaterial(c, len / 2.4, 3.4 / 2.4, { metalness: 0.5, color: '#eef0f4', normalScale: new THREE.Vector2(1.8, 1.8) });
+    };
+    backWall.material = scanWall(10.4);
+    leftWall.material = scanWall(9.4);
+  }
 
   box(10.4, 0.18, 0.1, M('#22242a', { roughness: 0.6 }), 0, 0.09, -4.35, scene, false);
   box(0.1, 0.18, 9.4, M('#22242a', { roughness: 0.6 }), -5.15, 0.09, 0.3, scene, false);
@@ -581,7 +659,19 @@ async function build(host) {
   truck.position.set(2.1, 0, 3.0);
   truck.rotation.y = 3.785;
   scene.add(truck);
+  if (truckGltf) {
+    // scanned hand truck: frame at the back, nose plate pointing +z; boxes sit on the plate
+    const hand = truckGltf.scene.clone(true);
+    castAll(hand);
+    truck.add(hand);
+    truck.rotation.y = 0.6435;
+    carton(0.5, 0.38, 0.4, cardboard[0], truck, 0, 0.26, 0.27);
+    carton(0.46, 0.36, 0.36, cardboard[3], truck, 0.01, 0.63, 0.27, 0.05);
+    carton(0.4, 0.3, 0.32, cardboard[2], truck, -0.01, 0.96, 0.27, -0.06);
+    box(0.04, 1.08, 0.01, M('#e0a30c', { roughness: 0.5 }), 0, 0.6, 0.475, truck, false, 0.002);
+  }
   const frameMat = new THREE.MeshPhysicalMaterial({ color: '#ffc21a', roughness: 0.4, metalness: 0.3, clearcoat: 0.6, clearcoatRoughness: 0.2 });
+  if (!truckGltf) {
   [-0.2, 0.2].forEach((x) => cyl(0.016, 0.016, 1.3, frameMat, x, 0.75, 0.02, truck, 12));
   [0.35, 0.8].forEach((y) => { const c = cyl(0.012, 0.012, 0.4, frameMat, 0, y, 0.02, truck, 10); c.rotation.z = Math.PI / 2; });
   const grip = cyl(0.026, 0.026, 0.46, rubber, 0, 1.42, 0.02, truck, 14);
@@ -601,6 +691,7 @@ async function build(host) {
   carton(0.4, 0.3, 0.32, cardboard[2], truck, -0.01, 0.965, -0.2, -0.06);
   box(0.04, 1.1, 0.01, M('#e0a30c', { roughness: 0.5 }), 0, 0.62, -0.405, truck, false, 0.002);   // ratchet strap
   box(0.08, 0.06, 0.03, chrome, 0.0, 0.7, -0.42, truck, false, 0.008);
+  }
   contact(2.1, 3.0, 1.0, 1.0, 0.8);
 
   // flat four-wheel dolly with moving blankets, on the other side
@@ -625,6 +716,32 @@ async function build(host) {
   const beam = new THREE.MeshPhysicalMaterial({ color: '#f0a30a', roughness: 0.45, metalness: 0.25, clearcoat: 0.4 });
   const tub = new THREE.MeshPhysicalMaterial({ color: '#3b3e46', roughness: 0.35, clearcoat: 0.5, clearcoatRoughness: 0.3 });
   const tubLid = new THREE.MeshPhysicalMaterial({ color: '#5a5e69', roughness: 0.35, clearcoat: 0.5, clearcoatRoughness: 0.3 });
+  // fills one shelf (from sx, seg metres long) with a random mix of cartons, tubs, tins and boxes
+  const fillShelf = (sx, seg, top, z, maxH, maxD, lift) => {
+    let cursor = sx + 0.08;
+    while (cursor < sx + seg - 0.3) {
+      if (r() < 0.12) { cursor += 0.3; continue; }
+      const w = 0.25 + r() * 0.3, h = Math.min(maxH, 0.2 + r() * 0.38), d = Math.min(maxD, 0.3 + r() * 0.24);
+      if (cursor + w > sx + seg - 0.06) break;
+      const k = r();
+      const px = cursor + w / 2, py = top + lift + h / 2, pz = z + (r() - 0.5) * 0.06;
+      if (k < 0.18) {
+        box(w, h, d, tub, px, py, pz, scene, true, 0.03);
+        box(w + 0.02, 0.04, d + 0.02, tubLid, px, py + h / 2 + 0.02, pz, scene, true, 0.015);
+      } else if (k < 0.26) {
+        cyl(0.09, 0.09, 0.14, M('#c9ccd2', { roughness: 0.3, metalness: 0.9 }), px, top + lift + 0.07, pz, scene, 20);
+        cyl(0.075, 0.075, 0.02, M('#2c6fb3', { roughness: 0.4 }), px, top + lift + 0.15, pz, scene, 20);
+        cursor += 0.14;
+        continue;
+      } else if (k < 0.4) {
+        box(w, h, d, M('#e6e7ea', { roughness: 0.8 }), px, py, pz, scene, true, 0.012);
+        box(0.06, h + 0.008, d + 0.008, tapeMat, px, py, pz, scene, false, 0.003);
+      } else {
+        carton(w, h, d, cardboard[Math.floor(r() * cardboard.length)], scene, px, py, pz);
+      }
+      cursor += w + 0.03 + r() * 0.08;
+    }
+  };
   const shelfBay = (x0) => {
     const seg = 1.7, z = -4.05;
     [0, 1, 2].forEach((i) => [-0.29, 0.29].forEach((dz) => box(0.07, 2.6, 0.07, upright, x0 + i * seg, 1.3, z + dz, scene, true, 0.01)));
@@ -633,36 +750,25 @@ async function build(host) {
         const sx = x0 + i * seg;
         box(seg - 0.07, 0.07, 0.6, beam, sx + seg / 2, top - 0.035, z, scene, true, 0.012);
         box(seg - 0.09, 0.022, 0.58, wood('#d9bd8c'), sx + seg / 2, top + 0.011, z, scene, false, 0.004);
-        let cursor = sx + 0.1;
-        while (cursor < sx + seg - 0.35) {
-          if (r() < 0.12) { cursor += 0.3; continue; }
-          const w = 0.25 + r() * 0.3, h = 0.2 + r() * 0.38, d = 0.3 + r() * 0.24;
-          if (cursor + w > sx + seg - 0.08) break;
-          const k = r();
-          const px = cursor + w / 2, py = top + 0.022 + h / 2, pz = z + (r() - 0.5) * 0.06;
-          if (k < 0.18) {
-            box(w, h, d, tub, px, py, pz, scene, true, 0.03);
-            box(w + 0.02, 0.04, d + 0.02, tubLid, px, py + h / 2 + 0.02, pz, scene, true, 0.015);
-          } else if (k < 0.26) {
-            const can = cyl(0.09, 0.09, 0.14, M('#c9ccd2', { roughness: 0.3, metalness: 0.9 }), px, top + 0.022 + 0.07, pz, scene, 20);
-            can.userData.can = true;
-            cyl(0.075, 0.075, 0.02, M('#2c6fb3', { roughness: 0.4 }), px, top + 0.022 + 0.15, pz, scene, 20);
-            cursor += 0.14;
-            continue;
-          } else if (k < 0.4) {
-            box(w, h, d, M('#e6e7ea', { roughness: 0.8 }), px, py, pz, scene, true, 0.012);
-            box(0.06, h + 0.008, d + 0.008, tapeMat, px, py, pz, scene, false, 0.003);
-          } else {
-            carton(w, h, d, cardboard[Math.floor(r() * cardboard.length)], scene, px, py, pz);
-          }
-          cursor += w + 0.03 + r() * 0.08;
-        }
+        fillShelf(sx, seg, top, z, 0.58, 0.54, 0.022);
       });
     });
     [-0.29, 0.29].forEach((dz) => [0, 1, 2].forEach((i) => box(0.2, 0.012, 0.2, steel, x0 + i * seg, 0.006, z + dz, scene, false, 0.003)));
   };
-  shelfBay(1.5);
-  shelfBay(-4.9);
+  if (shelfGltf) {
+    // scanned steel shelving, 1.1 m wide x 2.14 m tall x 0.5 m deep (the model is in decimetres)
+    [2.05, 3.15, 4.25, -2.05, -3.15, -4.25].forEach((cx) => {
+      const unit = shelfGltf.scene.clone(true);
+      castAll(unit);
+      unit.scale.setScalar(0.1);
+      unit.position.set(cx, 0, -4.13);
+      scene.add(unit);
+      [0.15, 0.65, 1.15, 1.65].forEach((top) => fillShelf(cx - 0.5, 1.0, top, -4.13, 0.4, 0.42, 0.01));
+    });
+  } else {
+    shelfBay(1.5);
+    shelfBay(-4.9);
+  }
   contact(3.2, -4.05, 3.9, 1.0, 0.7);
   contact(-3.2, -4.05, 3.9, 1.0, 0.7);
 
