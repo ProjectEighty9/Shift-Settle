@@ -54,6 +54,15 @@ ul{padding:0;list-style:none}
 .nav{display:flex;gap:28px;font-weight:600;font-size:14px}
 .nav a:hover{color:var(--yellow)}
 
+/* phone + WhatsApp links */
+.contact-links{display:flex;align-items:center;gap:16px}
+.phone-link{display:flex;align-items:center;gap:7px;font-weight:700;font-size:14px;color:var(--white);white-space:nowrap}
+.phone-link:hover{color:var(--yellow)}
+.phone-link .icon{width:18px;height:18px;color:var(--yellow)}
+.wa-link{display:flex;flex:none;transition:transform .15s ease}
+.wa-link:hover{transform:scale(1.08)}
+.wa-icon{width:26px;height:26px}
+
 /* hero */
 .hero{padding:72px 0 88px}
 .hero-in{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr);gap:56px;align-items:center}
@@ -164,11 +173,13 @@ section[id],form[id]{scroll-margin-top:84px}
   .foot-in{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
   .foot-in > :first-child{grid-column:1 / -1}
   .cta{padding:56px 0}
-  .mbar{display:grid;grid-template-columns:1fr 1.5fr;gap:10px;position:fixed;left:0;right:0;bottom:0;z-index:30;padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:rgba(23,24,29,.95);backdrop-filter:blur(10px);border-top:1px solid var(--line)}
+  .mbar{display:grid;grid-template-columns:56px 56px 1fr;gap:10px;position:fixed;left:0;right:0;bottom:0;z-index:30;padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:rgba(23,24,29,.95);backdrop-filter:blur(10px);border-top:1px solid var(--line)}
+  .mbar-icon{padding:0}
   body{padding-bottom:70px}
 }
 @media (max-width:560px){
   .top .btn{display:none}
+  .phone-link span{display:none}
   .cards{grid-template-columns:minmax(0,1fr)}
   .quote{padding:22px 18px}
   .lede{font-size:17px}
@@ -199,6 +210,12 @@ section[id],form[id]{scroll-margin-top:84px}
   <symbol id="i-office" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="1.500"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2"/></symbol>
   <symbol id="i-shop" viewBox="0 0 24 24"><path d="M4 10v10h16V10"/><path d="M2.500 10 5 4h14l2.500 6Z"/><path d="M10 20v-5h4v5"/></symbol>
   <symbol id="i-art" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="1.500"/><rect x="7" y="8" width="10" height="8"/><path d="m7 16 3.500-4 2.500 3 1.500-1.500L17 16"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><path d="M6.5 3h3l1.5 4-2 1.5a12 12 0 0 0 6.5 6.5l1.5-2 4 1.5v3a2 2 0 0 1-2 2A17 17 0 0 1 4.5 5a2 2 0 0 1 2-2Z"/></symbol>
+  <symbol id="i-whatsapp" viewBox="0 0 32 32">
+    <circle cx="16" cy="16" r="16" fill="#25D366"/>
+    <path d="M22.4 9.6a8.9 8.9 0 0 0-14.3 10.5L7 24l4-1c1.3.7 2.7 1.1 4.2 1.1 4.9 0 8.9-4 8.9-8.9 0-2.4-.9-4.6-2.6-6.3Zm-6.2 13.7c-1.3 0-2.6-.3-3.7-1l-.3-.2-2.6.7.7-2.5-.2-.3a7.4 7.4 0 0 1 11.6-9 7.3 7.3 0 0 1 2.2 5.3c0 4.1-3.4 7.5-7.5 7.5Z" fill="#fff"/>
+    <path d="M19.8 17.9c-.3-.2-1.5-.8-1.8-.8-.2-.1-.4-.1-.6.1-.2.3-.6.8-.8 1-.1.1-.3.2-.5.1-1.8-.7-3-1.9-3.9-3.3-.1-.2-.1-.4.1-.6l.5-.6c.1-.2.2-.4.1-.6l-.7-1.6c-.1-.3-.4-.3-.6-.3h-.5c-.2 0-.5.1-.6.3-.3.3-.8.9-.8 2 0 1.1.8 2.2 1 2.4.2.2 1.6 2.5 4 3.5 2.2.9 2.2.6 2.6.6.4 0 1.4-.6 1.6-1.1.2-.5.2-1 .1-1.1Z" fill="#25D366"/>
+  </symbol>
 </svg>
 
 <header class="top">
@@ -213,6 +230,10 @@ section[id],form[id]{scroll-margin-top:84px}
       <a href="#art">Moving art</a>
       <a href="#contact">Contact</a>
     </nav>
+    <div class="contact-links">
+      <a class="phone-link" href="tel:+447565021113"><svg class="icon" aria-hidden="true"><use href="#i-phone"/></svg><span>07565 021113</span></a>
+      <a class="wa-link" href="https://wa.me/447565021113" target="_blank" rel="noopener" aria-label="Chat with us on WhatsApp"><svg class="wa-icon" aria-hidden="true"><use href="#i-whatsapp"/></svg></a>
+    </div>
     <a class="btn btn-yellow btn-sm" href="#quote">Get a free quote</a>
   </div>
 </header>
@@ -484,7 +505,8 @@ section[id],form[id]{scroll-margin-top:84px}
       <div>
         <h3>Contact</h3>
         <ul>
-          <li class="todo">Phone number to be added</li>
+          <li><a href="tel:+447565021113">07565 021113</a></li>
+          <li><a href="https://wa.me/447565021113" target="_blank" rel="noopener">WhatsApp us</a></li>
           <li class="todo">Email to be added</li>
           <li>shiftandsettle.co.uk</li>
         </ul>
@@ -498,7 +520,12 @@ section[id],form[id]{scroll-margin-top:84px}
 </footer>
 
 <div class="mbar">
-  <a class="btn btn-line" href="#how">How it works</a>
+  <a class="btn btn-line mbar-icon" href="tel:+447565021113" aria-label="Call us">
+    <svg class="icon" aria-hidden="true"><use href="#i-phone"/></svg>
+  </a>
+  <a class="btn btn-line mbar-icon" href="https://wa.me/447565021113" target="_blank" rel="noopener" aria-label="WhatsApp us">
+    <svg class="wa-icon" aria-hidden="true"><use href="#i-whatsapp"/></svg>
+  </a>
   <a class="btn btn-yellow" href="#quote">Get a free quote</a>
 </div>
 
