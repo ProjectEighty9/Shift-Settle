@@ -202,8 +202,17 @@ section[id],form[id]{scroll-margin-top:84px}
 @keyframes lampFlicker{0%{opacity:0}9%{opacity:.95}15%{opacity:.1}24%{opacity:.85}32%{opacity:.2}46%,100%{opacity:1}}
 @keyframes bulbFlicker{0%{fill:#7a735c}9%{fill:#fff3c4}15%{fill:#7a735c}24%{fill:#fff3c4}32%{fill:#7a735c}46%,100%{fill:#fff3c4}}
 @keyframes textLight{0%{filter:brightness(.5)}9%{filter:brightness(1)}15%{filter:brightness(.55)}24%{filter:brightness(.95)}32%{filter:brightness(.6)}46%,100%{filter:brightness(1)}}
+/* crates and boxes standing on the floor either side of the buttons */
+.props{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-top:34px}
+.props::after{content:"";position:absolute;left:0;right:0;bottom:4px;height:2px;background:linear-gradient(90deg,transparent,#3a3d46 12%,#3a3d46 88%,transparent)}
+.prop{display:block;height:auto;overflow:visible;position:relative;z-index:1}
+.prop-l{width:clamp(150px,21vw,250px)}
+.prop-r{width:clamp(140px,19vw,220px)}
 @media (max-width:760px){
   .hero-copy{padding-top:92px;--lx:50%}
+  .props{margin-top:26px}
+  .prop-l{width:min(44vw,190px)}
+  .prop-r{width:min(40vw,170px)}
   .lamp-btn{left:-48px;width:96px;height:77px}
   .lamp-cone{left:-360px;width:720px;height:560px;top:52px}
   .lamp-glow{left:-380px;width:760px}
@@ -366,6 +375,36 @@ section[id],form[id]{scroll-margin-top:84px}
       <text x="56" y="61" text-anchor="middle" font-family="Archivo,Arial,sans-serif" font-weight="900" font-size="44" fill="var(--van)">&amp;</text>
     </g>
   </symbol>
+  <!-- hero props: a wooden crate and a taped cardboard box, lit warm from the lamp side -->
+  <defs>
+    <linearGradient id="prop-light" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffe28c" stop-opacity=".32"/>
+      <stop offset=".55" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".34"/>
+    </linearGradient>
+  </defs>
+  <symbol id="crate" viewBox="0 0 140 100">
+    <rect width="140" height="100" rx="3" fill="#b9803f"/>
+    <path d="M0 16h140M0 49h140M0 82h140" stroke="#000" stroke-opacity=".09"/>
+    <path d="M0 33h140M0 66h140" stroke="#7a4f22" stroke-width="3"/>
+    <rect width="15" height="100" fill="#8f5f2b"/>
+    <rect x="125" width="15" height="100" fill="#8f5f2b"/>
+    <path d="M15 92 125 8" stroke="#a06d34" stroke-width="13"/>
+    <path d="M15 92 125 8" stroke="#5a3a1a" stroke-opacity=".6" stroke-width="1.500"/>
+    <g fill="#3f2810"><circle cx="7.500" cy="10" r="2.200"/><circle cx="7.500" cy="50" r="2.200"/><circle cx="7.500" cy="90" r="2.200"/><circle cx="132.500" cy="10" r="2.200"/><circle cx="132.500" cy="50" r="2.200"/><circle cx="132.500" cy="90" r="2.200"/></g>
+    <rect width="140" height="100" rx="3" fill="url(#prop-light)"/>
+    <rect x="1" y="1" width="138" height="98" rx="3" fill="none" stroke="#4f3216" stroke-width="2"/>
+  </symbol>
+  <symbol id="box" viewBox="0 0 100 80">
+    <rect width="100" height="80" rx="2" fill="#d2a86e"/>
+    <rect width="100" height="13" fill="#e4c18a"/>
+    <rect y="13" width="100" height="2" fill="#a77c46" opacity=".6"/>
+    <rect x="41" width="18" height="80" fill="#ffc21a"/>
+    <rect x="64" y="46" width="28" height="22" fill="#f7f3e8"/>
+    <path d="M68 52h20M68 57h20M68 62h12" stroke="#8a8f9b" stroke-width="2"/>
+    <rect width="100" height="80" rx="2" fill="url(#prop-light)"/>
+    <rect x="1" y="1" width="98" height="78" rx="2" fill="none" stroke="#8a6030" stroke-width="2"/>
+  </symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12.500 2.700 2.700L16 9.500"/></symbol>
   <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.500 12 3l9 7.500V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1Z"/></symbol>
   <symbol id="i-office" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="1.500"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2"/></symbol>
@@ -439,6 +478,22 @@ section[id],form[id]{scroll-margin-top:84px}
         <div class="cta-row">
           <a class="btn btn-yellow" href="#quote">Get a free quote</a>
           <a class="btn btn-line" href="#art">Moving art?</a>
+        </div>
+        <div class="props" aria-hidden="true">
+          <svg class="prop prop-l" viewBox="0 0 330 196">
+            <ellipse cx="165" cy="193" rx="160" ry="7" fill="#000" opacity=".5"/>
+            <use href="#crate" x="8" y="92" width="150" height="100"/>
+            <use href="#box" x="172" y="109" width="104" height="83"/>
+            <use href="#crate" x="34" y="21" width="100" height="71" transform="rotate(-2 84 56)"/>
+            <use href="#box" x="186" y="53" width="70" height="56" transform="rotate(3 221 81)"/>
+          </svg>
+          <svg class="prop prop-r" viewBox="0 0 280 190">
+            <ellipse cx="140" cy="187" rx="136" ry="7" fill="#000" opacity=".5"/>
+            <use href="#box" x="6" y="108" width="100" height="80"/>
+            <use href="#crate" x="118" y="88" width="150" height="100"/>
+            <use href="#box" x="16" y="47" width="76" height="61" transform="rotate(-3 54 78)"/>
+            <use href="#crate" x="140" y="17" width="96" height="71" transform="rotate(2 188 52)"/>
+          </svg>
         </div>
       </div>
 
