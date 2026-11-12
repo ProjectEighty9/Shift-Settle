@@ -541,7 +541,6 @@ section[id],form[id]{scroll-margin-top:84px}
         <ul>
           <li><a href="tel:+447565021113">07565 021113</a></li>
           <li><a href="https://wa.me/447565021113" target="_blank" rel="noopener">WhatsApp us</a></li>
-          <li class="todo">Email to be added</li>
           <li>shiftandsettle.co.uk</li>
         </ul>
       </div>
@@ -622,11 +621,39 @@ section[id],form[id]{scroll-margin-top:84px}
     document.body.insertBefore(strip, document.body.firstChild);
   }
 
-  // The business has no phone, email or form service yet, so the form only says so.
+  // No email service yet: the form builds a WhatsApp message to the business number
+  // with the customer's details filled in; they press send in WhatsApp to finish.
+  var WA_NUMBER = '447565021113';
+  var clean = function (v) { return String(v || '').replace(/\s+/g, ' ').trim(); };
   form.addEventListener('submit', function (e) {
     e.preventDefault();
     if (!form.reportValidity()) return;
-    note.textContent = 'Draft design: this form is not connected yet, so nothing was sent.';
+    var f = form.elements;
+    var isPrice = form.dataset.mode === 'price';
+    var lines = [
+      isPrice ? 'Hi Shift & Settle, here is the price I would like to pay for my move.'
+              : 'Hi Shift & Settle, I would like a quote.',
+      '',
+      'Moving from: ' + clean(f.from.value),
+      'Moving to: ' + clean(f.to.value),
+      'Date: ' + clean(f.date.value),
+      'What is moving: ' + clean(f.type.value),
+      'Details: ' + clean(f.items.value)
+    ];
+    var money = clean(f.budget.value);
+    if (money) lines.push((isPrice ? 'My price: £' : 'Budget: £') + money);
+    lines.push('', 'Name: ' + clean(f.name.value), 'Phone: ' + clean(f.phone.value));
+    var url = 'https://wa.me/' + WA_NUMBER + '?text=' + encodeURIComponent(lines.join('\n'));
+    var win = window.open(url, '_blank', 'noopener');
+    note.textContent = '';
+    var msg = document.createTextNode(win
+      ? 'Almost done: press send in WhatsApp and we will reply there. '
+      : 'Tap the link to send your details on WhatsApp: ');
+    note.appendChild(msg);
+    var a = document.createElement('a');
+    a.href = url; a.target = '_blank'; a.rel = 'noopener';
+    a.textContent = 'Open WhatsApp';
+    note.appendChild(a);
   });
 })();
 </script>
