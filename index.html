@@ -208,6 +208,28 @@ section[id],form[id]{scroll-margin-top:84px}
 .prop{display:block;height:auto;overflow:visible;position:relative;z-index:1}
 .prop-l{width:clamp(150px,21vw,250px)}
 .prop-r{width:clamp(140px,19vw,220px)}
+/* the RC pickup: parked by the teddy, drives away, turns round on a farther lane, comes back */
+.props{margin-bottom:26px}
+.rc{position:absolute;right:0;bottom:-16px;width:60px;z-index:2;--tr:min(calc(100vw - 150px),520px);--far:-12px;animation:rcDrive 18s infinite}
+.rc svg{display:block;width:100%;height:auto;overflow:visible}
+.rc .wheel{transform-box:fill-box;transform-origin:center;animation:rcSpin 18s infinite}
+.rc-ant{transform-box:fill-box;transform-origin:50% 100%;animation:rcSway .9s ease-in-out infinite alternate}
+@keyframes rcDrive{
+  0%,8%{transform:translate(0,0) scale(-1,1);animation-timing-function:ease-in-out}
+  44%{transform:translate(calc(var(--tr) * -1),0) scale(-1,1);animation-timing-function:ease-in-out}
+  52%{transform:translate(calc(var(--tr) * -1),var(--far)) scale(.85,.85);animation-timing-function:ease-in-out}
+  90%{transform:translate(0,var(--far)) scale(.85,.85);animation-timing-function:ease-in-out}
+  98%,100%{transform:translate(0,0) scale(-1,1)}
+}
+@keyframes rcSpin{
+  0%,8%{transform:rotate(0);animation-timing-function:ease-in-out}
+  44%{transform:rotate(2300deg);animation-timing-function:ease-in-out}
+  52%{transform:rotate(2500deg);animation-timing-function:ease-in-out}
+  90%{transform:rotate(4800deg);animation-timing-function:ease-in-out}
+  98%,100%{transform:rotate(5000deg)}
+}
+@keyframes rcSway{from{transform:rotate(-5deg)}to{transform:rotate(5deg)}}
+@media (min-width:981px){.rc{width:72px;--tr:calc(100vw * .5 - 120px)}}
 /* wide screens: the stacks stand beside the text instead of under it */
 @media (min-width:1180px){
   .props{display:block;height:0;margin:0}
@@ -215,6 +237,8 @@ section[id],form[id]{scroll-margin-top:84px}
   .prop-r{position:absolute;right:0;bottom:0;width:clamp(180px,15vw,230px)}
   .prop-l{position:absolute;right:calc(100% + 16px);bottom:0;width:min(270px,calc((100vw - 1120px) / 2 - 32px))}
   .hero-copy .lede{max-width:min(36em,calc(100% - 250px))}
+  .props{margin-bottom:0}
+  .rc{width:104px;right:calc(clamp(180px,15vw,230px) + 30px);bottom:-84px;--tr:310px;--far:-18px}
 }
 @media (min-width:1180px) and (max-width:1559px){
   .prop-l{display:none}
@@ -229,6 +253,8 @@ section[id],form[id]{scroll-margin-top:84px}
   .lamp-glow{left:-380px;width:760px}
 }
 @media (prefers-reduced-motion:reduce){
+  .rc,.rc .wheel,.rc-ant{animation:none}
+  .rc{transform:scale(-1,1)}
   .lamp{animation:none}
   .hero-copy .lamp-cone,.hero-copy .lamp-glow,.hero-copy .bulb,.hero-copy > :not(.lamp){animation:none!important}
 }
@@ -428,6 +454,11 @@ section[id],form[id]{scroll-margin-top:84px}
       <circle cx="40" cy="30" r="22" fill="#b07a43"/>
     </g>
     <ellipse cx="40" cy="71" rx="14" ry="16" fill="#d9b27a"/>
+    <!-- the remote control he is driving the truck with -->
+    <path d="M65 64 62 52" stroke="#9aa0ad" stroke-width="1.300" stroke-linecap="round"/>
+    <rect x="60" y="63" width="15" height="10" rx="2.200" fill="#23252c" stroke="#000" stroke-opacity=".45"/>
+    <circle cx="65" cy="68" r="2" fill="#ffc21a"/>
+    <circle cx="71" cy="68" r="1.300" fill="#d93a3f"/>
     <ellipse cx="20" cy="88" rx="7" ry="5" fill="#d9b27a"/>
     <ellipse cx="60" cy="88" rx="7" ry="5" fill="#d9b27a"/>
     <circle cx="20" cy="12" r="4.500" fill="#d9b27a"/>
@@ -533,6 +564,26 @@ section[id],form[id]{scroll-margin-top:84px}
             <use href="#crate" x="150" y="17" width="96" height="71" transform="rotate(2 198 52)"/>
             <use href="#teddy" x="68" y="86" width="84" height="101"/>
           </svg>
+          <!-- a toy RC pickup: drives away along the floor, turns round, comes back and parks -->
+          <div class="rc">
+            <svg viewBox="0 -14 124 76">
+              <ellipse cx="62" cy="57" rx="52" ry="3.500" fill="#000" opacity=".5"/>
+              <g class="rc-ant"><path d="M60 22 58 -8" stroke="#9aa0ad" stroke-width="1.300" stroke-linecap="round"/><circle cx="58" cy="-9" r="2.400" fill="#ffc21a"/></g>
+              <rect x="6" y="36" width="112" height="8" rx="3" fill="#23252c"/>
+              <path d="M6 38V22h50v16Z" fill="#ffc21a" stroke="#a87700" stroke-width="1.200" stroke-linejoin="round"/>
+              <path d="M6 38V22h50v16Z" fill="url(#prop-light)"/>
+              <path d="M8 24.500h46" stroke="#fff" stroke-opacity=".28" stroke-width="2"/>
+              <path d="M56 38V21l10-12h27l12 14 10 4v11Z" fill="#ffc21a" stroke="#a87700" stroke-width="1.200" stroke-linejoin="round"/>
+              <path d="M56 38V21l10-12h27l12 14 10 4v11Z" fill="url(#prop-light)"/>
+              <path d="M69 22.500 74.500 12h18l8.500 10.500Z" fill="#9fc3d6"/>
+              <path d="M74.500 12h18l-3 10.500H69Z" fill="#fff" opacity=".25"/>
+              <rect x="105" y="33" width="13" height="7" rx="2" fill="#2e3038"/>
+              <circle cx="113" cy="29" r="2.800" fill="#fff3c4"/>
+              <rect x="3" y="28" width="3.500" height="6" rx="1" fill="#d93a3f"/>
+              <g transform="translate(30 44)"><g class="wheel"><circle r="14" fill="#17181d"/><circle r="14" fill="none" stroke="#4a4d57" stroke-width="3" stroke-dasharray="4 4"/><circle r="8" fill="#5a5e69"/><path d="M0-8V8M-8 0H8" stroke="#3a3d46" stroke-width="2"/><circle r="3" fill="#ffc21a"/></g></g>
+              <g transform="translate(92 44)"><g class="wheel"><circle r="14" fill="#17181d"/><circle r="14" fill="none" stroke="#4a4d57" stroke-width="3" stroke-dasharray="4 4"/><circle r="8" fill="#5a5e69"/><path d="M0-8V8M-8 0H8" stroke="#3a3d46" stroke-width="2"/><circle r="3" fill="#ffc21a"/></g></g>
+            </svg>
+          </div>
         </div>
       </div>
 
