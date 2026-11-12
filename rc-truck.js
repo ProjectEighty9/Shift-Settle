@@ -100,7 +100,7 @@ async function start() {
   const liner = new THREE.MeshStandardMaterial({ color: 0x15161a, roughness: 0.9, metalness: 0 });
   const rubber = new THREE.MeshStandardMaterial({ color: 0x101114, roughness: 0.92, metalness: 0 });
   const metal = new THREE.MeshStandardMaterial({ color: 0xa4a9b5, roughness: 0.32, metalness: 0.95 });
-  const glass = new THREE.MeshPhysicalMaterial({ color: 0x0c1822, roughness: 0.04, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.03, envMapIntensity: 1.6 });
+  const glass = new THREE.MeshPhysicalMaterial({ color: 0x08131c, roughness: 0.03, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.02, envMapIntensity: 2.2 });
   const lamp = new THREE.MeshStandardMaterial({ color: 0xfff3c4, emissive: 0xffe9a0, emissiveIntensity: 2.2, roughness: 0.3 });
   const tail = new THREE.MeshStandardMaterial({ color: 0xd93a3f, emissive: 0xff2a2a, emissiveIntensity: 1.4, roughness: 0.4 });
   const amber = new THREE.MeshStandardMaterial({ color: 0xffa21a, emissive: 0xff9a00, emissiveIntensity: 1.2, roughness: 0.4 });
@@ -215,10 +215,36 @@ async function start() {
   const winGeo = new THREE.ExtrudeGeometry(winShape, { depth: 0.492, bevelEnabled: false });
   winGeo.translate(0, 0, -0.246);
   body.add(new THREE.Mesh(winGeo, glass));
-  const shield = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.19, 0.4), glass);
-  shield.position.set(0.178, 0.632, 0); shield.rotation.z = 0.529; body.add(shield);
+  // windscreen: the cab's front slope runs (0.11,0.745) -> (0.25,0.5) and the bevel pushes the paint
+  // about 0.015 further out, so the glass sits 0.022 out along the slope's normal to stay in front of it
+  const shield = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.225, 0.42), glass);
+  shield.position.set(0.201, 0.63, 0); shield.rotation.z = 0.5195; body.add(shield);
+  // a soft sky reflection streak across the glass
+  const glintCanvas = document.createElement('canvas');
+  glintCanvas.width = glintCanvas.height = 128;
+  const gx = glintCanvas.getContext('2d');
+  const glintGrad = gx.createLinearGradient(0, 0, 128, 128);
+  glintGrad.addColorStop(0, 'rgba(255,255,255,0)');
+  glintGrad.addColorStop(0.3, 'rgba(255,255,255,0)');
+  glintGrad.addColorStop(0.42, 'rgba(190,225,255,.55)');
+  glintGrad.addColorStop(0.5, 'rgba(255,255,255,.12)');
+  glintGrad.addColorStop(0.58, 'rgba(190,225,255,.35)');
+  glintGrad.addColorStop(0.7, 'rgba(255,255,255,0)');
+  glintGrad.addColorStop(1, 'rgba(255,255,255,0)');
+  gx.fillStyle = glintGrad; gx.fillRect(0, 0, 128, 128);
+  const glint = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.225),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(glintCanvas), transparent: true, depthWrite: false, opacity: 0.8 }));
+  glint.rotation.y = Math.PI / 2; glint.position.x = 0.0035;
+  shield.add(glint);
+  // dark A-pillars and a header strip frame the glass
+  for (const s of [-1, 1]) {
+    const pillar = rbox(0.012, 0.25, 0.022, plastic, 0.004, 2);
+    pillar.position.set(0.2, 0.632, s * 0.212); pillar.rotation.z = 0.5195; body.add(pillar);
+  }
+  const header = rbox(0.016, 0.014, 0.43, plastic, 0.004, 2);
+  header.position.set(0.126, 0.745, 0); header.rotation.z = 0.5195; body.add(header);
   const rear = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.12, 0.34), glass);
-  rear.position.set(-0.092, 0.6, 0); body.add(rear);
+  rear.position.set(-0.098, 0.6, 0); body.add(rear);
 
   const bar = rbox(0.06, 0.028, 0.36, plastic, 0.01, 2); bar.position.set(0.075, 0.77, 0); body.add(bar);
   for (let i = 0; i < 4; i++) {
