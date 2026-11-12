@@ -177,6 +177,42 @@ section[id],form[id]{scroll-margin-top:84px}
 /* hero glow: the yellow stripe, softly */
 .hero{position:relative;background:radial-gradient(60% 70% at 8% 0%,rgba(255,194,26,.14),transparent 70%),radial-gradient(50% 60% at 100% 100%,rgba(255,194,26,.07),transparent 70%)}
 
+/* hero lamp: hangs over the headline, swings a little, lights the text */
+.hero{overflow:hidden}
+.hero-copy{position:relative;padding-top:104px;--lx:300px}
+.hero-copy > :not(.lamp){position:relative;z-index:1;transition:filter .6s ease,text-shadow .6s ease}
+.lamp{position:absolute;top:0;left:var(--lx);width:0;height:0;z-index:0;transform-origin:0 -420px;animation:lampSwing 7s ease-in-out infinite alternate}
+.lamp-cord{position:absolute;left:-1px;top:-420px;width:2px;height:424px;background:linear-gradient(#2e3038,#5a5e69)}
+.lamp-btn{position:absolute;left:-60px;top:0;width:120px;height:96px;padding:0;border:0;background:none;cursor:pointer;z-index:2;filter:drop-shadow(0 6px 10px rgba(0,0,0,.45))}
+.lamp-btn svg{width:100%;height:100%;overflow:visible}
+.lamp-btn .bulb{filter:drop-shadow(0 0 14px rgba(255,226,140,.95));transition:fill .4s ease}
+.lamp-cone{position:absolute;left:-440px;top:64px;width:880px;height:680px;pointer-events:none;mix-blend-mode:screen;transition:opacity .5s ease}
+.lamp-glow{position:absolute;left:-470px;top:20px;width:940px;height:700px;pointer-events:none;background:radial-gradient(50% 50% at 50% 12%,rgba(255,194,26,.22),transparent 72%);transition:opacity .5s ease}
+.hero-copy h1{text-shadow:0 0 38px rgba(255,194,26,.2)}
+.hero-copy h1 em{text-shadow:0 0 30px rgba(255,194,26,.45)}
+/* lamp switched off */
+.hero-copy.lamp-off > :not(.lamp){filter:brightness(.5);text-shadow:none}
+.hero-copy.lamp-off .lamp-cone,.hero-copy.lamp-off .lamp-glow{opacity:0}
+.hero-copy.lamp-off .bulb{fill:#7a735c;filter:none}
+/* flicker on at page load */
+.hero-copy:not(.lamp-user) .lamp-cone,.hero-copy:not(.lamp-user) .lamp-glow{animation:lampFlicker 1.9s .5s both}
+.hero-copy:not(.lamp-user) .bulb{animation:bulbFlicker 1.9s .5s both}
+.hero-copy:not(.lamp-user) > :not(.lamp){animation:textLight 1.9s .5s both}
+@keyframes lampSwing{from{transform:rotate(-1.3deg)}to{transform:rotate(1.3deg)}}
+@keyframes lampFlicker{0%{opacity:0}9%{opacity:.95}15%{opacity:.1}24%{opacity:.85}32%{opacity:.2}46%,100%{opacity:1}}
+@keyframes bulbFlicker{0%{fill:#7a735c}9%{fill:#fff3c4}15%{fill:#7a735c}24%{fill:#fff3c4}32%{fill:#7a735c}46%,100%{fill:#fff3c4}}
+@keyframes textLight{0%{filter:brightness(.5)}9%{filter:brightness(1)}15%{filter:brightness(.55)}24%{filter:brightness(.95)}32%{filter:brightness(.6)}46%,100%{filter:brightness(1)}}
+@media (max-width:760px){
+  .hero-copy{padding-top:92px;--lx:50%}
+  .lamp-btn{left:-48px;width:96px;height:77px}
+  .lamp-cone{left:-360px;width:720px;height:560px;top:52px}
+  .lamp-glow{left:-380px;width:760px}
+}
+@media (prefers-reduced-motion:reduce){
+  .lamp{animation:none}
+  .hero-copy .lamp-cone,.hero-copy .lamp-glow,.hero-copy .bulb,.hero-copy > :not(.lamp){animation:none!important}
+}
+
 /* light sections for rhythm */
 .light{background:#f5f2ea;color:var(--ink);--arch:#f5f2ea}
 .light .eyebrow{color:#8a5f00}
@@ -369,7 +405,34 @@ section[id],form[id]{scroll-margin-top:84px}
 
   <section class="hero">
     <div class="wrap hero-in">
-      <div>
+      <div class="hero-copy" id="hero-copy">
+        <!-- A work lamp hangs over the headline and lights the text. Click it to switch it off or on. -->
+        <div class="lamp">
+          <div class="lamp-cord" aria-hidden="true"></div>
+          <div class="lamp-glow" aria-hidden="true"></div>
+          <svg class="lamp-cone" viewBox="-60 -40 880 680" aria-hidden="true">
+            <defs>
+              <linearGradient id="lamp-beam" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#ffe28c" stop-opacity=".46"/>
+                <stop offset=".55" stop-color="#ffe28c" stop-opacity=".13"/>
+                <stop offset="1" stop-color="#ffe28c" stop-opacity="0"/>
+              </linearGradient>
+              <filter id="lamp-soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="14"/></filter>
+            </defs>
+            <polygon points="320,0 440,0 800,620 -40,620" fill="url(#lamp-beam)" filter="url(#lamp-soft)"/>
+          </svg>
+          <button class="lamp-btn" type="button" aria-pressed="true" aria-label="Hanging lamp. Press to switch it off">
+            <svg viewBox="0 0 120 96" aria-hidden="true">
+              <rect x="52" y="0" width="16" height="9" rx="2" fill="#4a4d57"/>
+              <path d="M8 60C8 24 34 10 60 10s52 14 52 50Z" fill="#ffc21a"/>
+              <path d="M22 56C24 34 40 20 58 18c-14 6-24 18-26 38Z" fill="#fff" opacity=".28"/>
+              <ellipse cx="60" cy="60" rx="52" ry="7" fill="#ffd96a"/>
+              <ellipse class="bulb" cx="60" cy="63" rx="16" ry="10" fill="#fff3c4"/>
+              <path d="M98 64v20" stroke="#8e93a0" stroke-width="2" stroke-dasharray="2 2"/>
+              <circle cx="98" cy="89" r="4.5" fill="#ffc21a"/>
+            </svg>
+          </button>
+        </div>
         <span class="eyebrow pill">Removals · London</span>
         <h1 class="display">We shift it. <em>You settle in.</em></h1>
         <p class="lede">House and flat moves, office and shop relocations, and careful art moving across London. Tell us what's moving and we'll send you a clear price.</p>
@@ -863,6 +926,18 @@ section[id],form[id]{scroll-margin-top:84px}
     btn.addEventListener('click', function () { setMode(btn.dataset.mode); });
   });
   setMode('quote');
+
+  // The hero lamp switches the light (and the lit text) off and on.
+  var heroCopy = document.getElementById('hero-copy');
+  var lampBtn = heroCopy && heroCopy.querySelector('.lamp-btn');
+  if (lampBtn) {
+    lampBtn.addEventListener('click', function () {
+      heroCopy.classList.add('lamp-user');
+      var off = heroCopy.classList.toggle('lamp-off');
+      lampBtn.setAttribute('aria-pressed', off ? 'false' : 'true');
+      lampBtn.setAttribute('aria-label', off ? 'Hanging lamp. Press to switch it on' : 'Hanging lamp. Press to switch it off');
+    });
+  }
 
   // The two pricing cards pick the matching mode on the form.
   document.querySelectorAll('[data-pick]').forEach(function (a) {
