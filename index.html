@@ -9,6 +9,27 @@
 <meta property="og:title" content="Shift &amp; Settle — We shift it. You settle in.">
 <meta property="og:description" content="Removals across London for homes, offices, shops and art.">
 <meta property="og:type" content="website">
+<meta property="og:url" content="https://shiftandsettle.co.uk/">
+<meta property="og:image" content="https://shiftandsettle.co.uk/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="en_GB">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="canonical" href="https://shiftandsettle.co.uk/">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"MovingCompany","name":"Shift & Settle","url":"https://shiftandsettle.co.uk/","telephone":"+447565021113","slogan":"We shift it. You settle in.","description":"Removals across London for homes, offices, shops and art.","image":"https://shiftandsettle.co.uk/og.png","areaServed":{"@type":"City","name":"London"}}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
+{"@type":"Question","name":"How is my price worked out?","acceptedAnswer":{"@type":"Answer","text":"We look at how much is moving, the access at both ends (stairs, lifts, parking), the distance and your date. You get one price for the whole job before anything is booked."}},
+{"@type":"Question","name":"What does “Tell your price” mean?","acceptedAnswer":{"@type":"Answer","text":"You tell us what you would like to pay. We say yes, or come back with our closest offer. There is no obligation either way."}},
+{"@type":"Question","name":"Can you move just one item?","acceptedAnswer":{"@type":"Answer","text":"Yes. Choose “Single item” in the form, or message us on WhatsApp with a photo and we will price it."}},
+{"@type":"Question","name":"Can I send photos instead of filling in the form?","acceptedAnswer":{"@type":"Answer","text":"Yes. WhatsApp photos of your rooms or items to 07565 021113 and we will use them to price the job."}},
+{"@type":"Question","name":"Do you move art and antiques?","acceptedAnswer":{"@type":"Answer","text":"Yes. Each piece is packed to suit what it is. Tell us the sizes and any fragile or valuable pieces when you ask for a price."}},
+{"@type":"Question","name":"Which areas do you cover?","acceptedAnswer":{"@type":"Answer","text":"All of London: north, south, east, west and central. Moving further afield? Ask us and we will tell you."}},
+{"@type":"Question","name":"How soon can you move me?","acceptedAnswer":{"@type":"Answer","text":"Put your preferred date in the form. We will confirm whether we can do it when we send your price."}}
+]}
+</script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2317181d'/%3E%3Cg transform='rotate(-8 32 32)'%3E%3Crect x='12' y='12' width='40' height='40' rx='7' fill='%23ffc21a'/%3E%3Ctext x='32' y='45' text-anchor='middle' font-family='Arial,sans-serif' font-weight='900' font-size='30' fill='%2317181d'%3E%26amp;%3C/text%3E%3C/g%3E%3C/svg%3E">
 <script type="importmap">
 {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}
@@ -54,8 +75,10 @@ ul{padding:0;list-style:none}
 .brand{display:flex;align-items:center;gap:12px;font-weight:900;font-stretch:125%;font-size:18px;letter-spacing:-.01em;margin-right:auto;white-space:nowrap}
 .brand em{font-style:normal;color:var(--yellow)}
 .mark{width:44px;height:38px;flex:none}
-.nav{display:flex;gap:28px;font-weight:600;font-size:14px}
+.nav{display:flex;gap:22px;font-weight:600;font-size:14px}
+.nav a{white-space:nowrap}
 .nav a:hover{color:var(--yellow)}
+@media (max-width:1100px){.nav{display:none}}
 
 /* phone + WhatsApp links */
 .contact-links{display:flex;align-items:center;gap:16px}
@@ -139,7 +162,7 @@ section[id],form[id]{scroll-margin-top:84px}
 .scene canvas:active{cursor:grabbing}
 .scene-status{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-weight:600;font-size:14px;padding:0 20px;text-align:center;pointer-events:none;transition:opacity .4s}
 .scene.is-ready .scene-status{opacity:0}
-.scene.is-failed .scene-ui{display:none}
+.scene.is-failed .scene-ui,.scene:not(.is-ready) .scene-ui{display:none}
 .scene-ui{position:absolute;left:14px;right:14px;bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:12px;pointer-events:none}
 .scene-hint{background:rgba(23,24,29,.75);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:999px;padding:7px 14px;font-size:12.5px;font-weight:700}
 .scene-zoom{display:flex;gap:8px;pointer-events:auto}
@@ -150,6 +173,65 @@ section[id],form[id]{scroll-margin-top:84px}
 .v-wide{font-weight:900;font-stretch:125%;letter-spacing:-.02em}
 .chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:28px}
 .chips li{border:1px solid #4a4d57;border-radius:999px;padding:8px 16px;font-size:13.5px;font-weight:600}
+
+/* hero glow: the yellow stripe, softly */
+.hero{position:relative;background:radial-gradient(60% 70% at 8% 0%,rgba(255,194,26,.14),transparent 70%),radial-gradient(50% 60% at 100% 100%,rgba(255,194,26,.07),transparent 70%)}
+
+/* light sections for rhythm */
+.light{background:#f5f2ea;color:var(--ink);--arch:#f5f2ea}
+.light .eyebrow{color:#8a5f00}
+.light .sub{color:#4b4f5a}
+
+/* service illustrations */
+.card .ill{margin:-8px -8px 20px;border-radius:12px;background:var(--ink-2);border:1px solid var(--line);aspect-ratio:200/110;overflow:hidden}
+.card .ill svg{width:100%;height:100%}
+.card{transition:transform .2s ease,border-color .2s ease}
+.card:hover{transform:translateY(-3px);border-color:#4a4d57}
+
+/* pricing */
+.price-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin-top:40px}
+.price-card{background:var(--white);border:2px solid var(--ink);border-radius:20px;padding:30px;display:flex;flex-direction:column}
+.price-card.accent{background:var(--yellow)}
+.price-card h3{font-size:26px;font-weight:900;font-stretch:125%;letter-spacing:-.02em;line-height:1.05}
+.price-card > p{margin-top:10px;font-size:16px;color:#33363e}
+.price-card ul{display:grid;gap:10px;margin:20px 0 26px}
+.price-card li{display:flex;gap:10px;font-weight:700;font-size:15px}
+.price-card li .icon{margin-top:2px}
+.price-card .btn{margin-top:auto;align-self:flex-start}
+.factors-title{margin-top:44px;font-weight:800;font-size:14px;letter-spacing:.04em}
+.factors{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+.factors li{border:2px solid var(--ink);border-radius:999px;padding:8px 16px;font-size:14px;font-weight:700;background:var(--white)}
+
+/* FAQ */
+.faq-list{margin-top:40px;max-width:800px;border-top:2px solid var(--ink)}
+.faq-list details{border-bottom:1px solid #d3cdbd}
+.faq-list summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:20px;padding:20px 4px;font-weight:800;font-size:18px}
+.faq-list summary::-webkit-details-marker{display:none}
+.faq-list summary::after{content:"+";flex:none;width:32px;height:32px;border-radius:50%;background:var(--ink);color:var(--yellow);display:grid;place-items:center;font-size:20px;font-weight:800;transition:transform .2s ease}
+.faq-list details[open] summary::after{transform:rotate(45deg)}
+.faq-list details p{padding:0 56px 22px 4px;color:#33363e;font-size:16px}
+.faq-list summary:hover{color:#5a3f00}
+
+/* gentle fade-up on scroll (added by script; skipped for reduced motion) */
+.rv{opacity:0;transform:translateY(14px);transition:opacity .6s ease,transform .6s ease}
+.rv.in{opacity:1;transform:none}
+
+/* button shown instead of auto-loading the 3D scene on phones */
+.scene-status{flex-direction:column;gap:10px}
+.scene-status:has(.scene-load){display:flex;align-items:center;justify-content:center}
+.scene-load{pointer-events:auto;min-height:48px;padding:0 24px;border-radius:999px;border:0;background:var(--yellow);color:var(--ink);font:800 15px/1 Archivo,system-ui,sans-serif;cursor:pointer}
+.scene-load:hover{background:#ffd04d}
+.scene-status small{font-weight:500;font-size:12.5px}
+
+@media (max-width:760px){
+  .price-grid{grid-template-columns:minmax(0,1fr)}
+  .faq-list summary{font-size:16.5px}
+  .faq-list details p{padding-right:8px}
+}
+@media (prefers-reduced-motion:reduce){
+  .rv{opacity:1;transform:none;transition:none}
+  .card,.card:hover{transition:none;transform:none}
+}
 
 /* call to action */
 .cta{background:var(--yellow);color:var(--ink);padding:72px 0}
@@ -243,7 +325,9 @@ section[id],form[id]{scroll-margin-top:84px}
     <nav class="nav" aria-label="Main">
       <a href="#services">Services</a>
       <a href="#how">How it works</a>
+      <a href="#pricing">Pricing</a>
       <a href="#art">Moving art</a>
+      <a href="#faq">FAQ</a>
       <a href="#contact">Contact</a>
     </nav>
     <div class="contact-links">
@@ -334,25 +418,71 @@ section[id],form[id]{scroll-margin-top:84px}
       <h2 class="display">Homes, offices, shops and art.</h2>
       <div class="cards">
         <article class="card">
-          <span class="ico"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg></span>
+          <div class="ill"><svg viewBox="0 0 200 110" aria-hidden="true">
+            <path d="M8 98h184" stroke="#3a3d46" stroke-width="2" stroke-linecap="round"/>
+            <rect x="22" y="40" width="88" height="34" rx="10" fill="#ffd45e"/>
+            <rect x="14" y="56" width="20" height="38" rx="8" fill="#ffc21a"/>
+            <rect x="98" y="56" width="20" height="38" rx="8" fill="#ffc21a"/>
+            <rect x="30" y="62" width="72" height="32" rx="6" fill="#ffc21a"/>
+            <rect x="26" y="94" width="6" height="6" rx="2" fill="#5a5e69"/>
+            <rect x="100" y="94" width="6" height="6" rx="2" fill="#5a5e69"/>
+            <rect x="140" y="46" width="32" height="18" rx="3" fill="#e4e0d4"/>
+            <rect x="132" y="64" width="46" height="34" rx="3" fill="#f2efe6"/>
+            <rect x="150" y="64" width="10" height="34" fill="#ffc21a"/>
+          </svg></div>
           <h3>House &amp; flat moves</h3>
           <p>From studios to family homes, packed, loaded and moved with care.</p>
           <span class="fact">Furniture taken apart and rebuilt</span>
         </article>
         <article class="card">
-          <span class="ico"><svg class="icon" aria-hidden="true"><use href="#i-office"/></svg></span>
+          <div class="ill"><svg viewBox="0 0 200 110" aria-hidden="true">
+            <path d="M8 98h184" stroke="#3a3d46" stroke-width="2" stroke-linecap="round"/>
+            <rect x="24" y="64" width="110" height="8" rx="3" fill="#ffc21a"/>
+            <rect x="30" y="72" width="6" height="26" fill="#5a5e69"/>
+            <rect x="122" y="72" width="6" height="26" fill="#5a5e69"/>
+            <rect x="54" y="24" width="52" height="34" rx="4" fill="#0e0f12" stroke="#5a5e69" stroke-width="2"/>
+            <rect x="77" y="58" width="6" height="6" fill="#5a5e69"/>
+            <path d="M62 34h26M62 43h36" stroke="#ffc21a" stroke-width="3" stroke-linecap="round"/>
+            <rect x="64" y="78" width="40" height="20" rx="2" fill="#f2efe6"/>
+            <rect x="80" y="78" width="8" height="20" fill="#ffc21a"/>
+            <rect x="150" y="48" width="14" height="30" rx="6" fill="#ffd45e"/>
+            <rect x="142" y="76" width="30" height="8" rx="4" fill="#ffc21a"/>
+            <path d="M157 84v12M145 98h24" stroke="#5a5e69" stroke-width="3" stroke-linecap="round"/>
+          </svg></div>
           <h3>Office relocation</h3>
           <p>Desks, files and IT kit moved with as little downtime as possible.</p>
           <span class="fact">Labelled room by room</span>
         </article>
         <article class="card">
-          <span class="ico"><svg class="icon" aria-hidden="true"><use href="#i-shop"/></svg></span>
+          <div class="ill"><svg viewBox="0 0 200 110" aria-hidden="true">
+            <rect x="38" y="40" width="124" height="58" fill="#23252c" stroke="#5a5e69" stroke-width="2"/>
+            <path d="M30 40h140l-8-20H38Z" fill="#ffc21a"/>
+            <path d="M58 20l-5 20M84 20l-2 20M112 20l2 20M138 20l5 20" stroke="#17181d" stroke-width="6" opacity=".85"/>
+            <rect x="86" y="54" width="28" height="44" fill="#0e0f12" stroke="#5a5e69" stroke-width="2"/>
+            <path d="M46 64h32M46 82h32" stroke="#5a5e69" stroke-width="3"/>
+            <rect x="50" y="52" width="12" height="12" fill="#f2efe6"/>
+            <rect x="64" y="54" width="10" height="10" fill="#ffc21a"/>
+            <rect x="52" y="70" width="14" height="12" fill="#ffc21a"/>
+            <rect x="68" y="72" width="9" height="10" fill="#f2efe6"/>
+            <rect x="126" y="58" width="26" height="14" rx="3" fill="#ffc21a"/>
+            <path d="M126 82h26M126 90h18" stroke="#5a5e69" stroke-width="3" stroke-linecap="round"/>
+          </svg></div>
           <h3>Shop relocation</h3>
           <p>Stock, shelving, counters and fittings moved to your new unit.</p>
           <span class="fact">Planned around your opening hours</span>
         </article>
         <article class="card">
-          <span class="ico"><svg class="icon" aria-hidden="true"><use href="#i-art"/></svg></span>
+          <div class="ill"><svg viewBox="0 0 200 110" aria-hidden="true">
+            <path d="M8 98h184" stroke="#3a3d46" stroke-width="2" stroke-linecap="round"/>
+            <path d="M84 74l-8 24M116 74l8 24M100 74v24" stroke="#5a5e69" stroke-width="4" stroke-linecap="round"/>
+            <rect x="64" y="14" width="72" height="60" rx="3" fill="#ffc21a"/>
+            <rect x="71" y="21" width="58" height="46" fill="#17181d"/>
+            <path d="M71 67l18-22 12 12 8-8 20 18Z" fill="#ffd45e"/>
+            <circle cx="115" cy="34" r="5" fill="#f2efe6"/>
+            <rect x="14" y="68" width="38" height="30" fill="#2e3038" stroke="#5a5e69" stroke-width="2"/>
+            <path d="M14 83h38M29 68v30" stroke="#5a5e69" stroke-width="2"/>
+            <rect x="150" y="50" width="30" height="44" rx="2" fill="#f2efe6" stroke="#ffc21a" stroke-width="4" transform="rotate(6 165 72)"/>
+          </svg></div>
           <h3>Art &amp; antiques</h3>
           <p>Paintings, sculpture and antiques, packed to suit each piece.</p>
           <a class="fact" href="#art">How we move art →</a>
@@ -382,6 +512,45 @@ section[id],form[id]{scroll-margin-top:84px}
           <p>We load with care, move it across, and put everything where you want it in the new place.</p>
         </div>
       </div>
+    </div>
+  </section>
+
+  <section class="section light" id="pricing">
+    <div class="wrap">
+      <span class="eyebrow">Pricing</span>
+      <h2 class="display">Two ways to set your price.</h2>
+      <p class="sub">Have us price the job, or tell us the price you want to pay. Either way you know where you stand before anything is booked.</p>
+      <div class="price-grid">
+        <article class="price-card">
+          <h3>Get a quote</h3>
+          <p>Tell us what's moving and we price the job.</p>
+          <ul>
+            <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>One clear price for the whole job</li>
+            <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Sent before anything is booked</li>
+            <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Free, no obligation</li>
+          </ul>
+          <a class="btn btn-dark" href="#quote" data-pick="quote">Get a quote</a>
+        </article>
+        <article class="price-card accent">
+          <h3>Tell your price</h3>
+          <p>Name what you would like to pay.</p>
+          <ul>
+            <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>You choose the number</li>
+            <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>We say yes, or come back with our closest offer</li>
+            <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>No obligation either way</li>
+          </ul>
+          <a class="btn btn-dark" href="#quote" data-pick="price">Tell us your price</a>
+        </article>
+      </div>
+      <p class="factors-title">What affects the price</p>
+      <ul class="factors">
+        <li>How much is moving</li>
+        <li>Stairs and lifts</li>
+        <li>Parking at both ends</li>
+        <li>Distance</li>
+        <li>Your date</li>
+        <li>Packing needed</li>
+      </ul>
     </div>
   </section>
 
@@ -505,6 +674,43 @@ section[id],form[id]{scroll-margin-top:84px}
     </div>
   </section>
 
+  <section class="section light" id="faq">
+    <div class="wrap">
+      <span class="eyebrow">Questions</span>
+      <h2 class="display">Good to know before you book.</h2>
+      <div class="faq-list">
+        <details>
+          <summary>How is my price worked out?</summary>
+          <p>We look at how much is moving, the access at both ends (stairs, lifts, parking), the distance and your date. You get one price for the whole job before anything is booked.</p>
+        </details>
+        <details>
+          <summary>What does “Tell your price” mean?</summary>
+          <p>You tell us what you would like to pay. We say yes, or come back with our closest offer. There is no obligation either way.</p>
+        </details>
+        <details>
+          <summary>Can you move just one item?</summary>
+          <p>Yes. Choose “Single item” in the form, or message us on WhatsApp with a photo and we will price it.</p>
+        </details>
+        <details>
+          <summary>Can I send photos instead of filling in the form?</summary>
+          <p>Yes. WhatsApp photos of your rooms or items to 07565 021113 and we will use them to price the job.</p>
+        </details>
+        <details>
+          <summary>Do you move art and antiques?</summary>
+          <p>Yes. Each piece is packed to suit what it is. Tell us the sizes and any fragile or valuable pieces when you ask for a price.</p>
+        </details>
+        <details>
+          <summary>Which areas do you cover?</summary>
+          <p>All of London: north, south, east, west and central. Moving further afield? Ask us and we will tell you.</p>
+        </details>
+        <details>
+          <summary>How soon can you move me?</summary>
+          <p>Put your preferred date in the form. We will confirm whether we can do it when we send your price.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
   <section class="cta" id="contact">
     <div class="wrap cta-in">
       <h2 class="display">Moving soon?<br>Get a free quote.</h2>
@@ -608,6 +814,24 @@ section[id],form[id]{scroll-margin-top:84px}
     btn.addEventListener('click', function () { setMode(btn.dataset.mode); });
   });
   setMode('quote');
+
+  // The two pricing cards pick the matching mode on the form.
+  document.querySelectorAll('[data-pick]').forEach(function (a) {
+    a.addEventListener('click', function () { setMode(a.dataset.pick); });
+  });
+
+  // Gentle fade-up as things scroll into view (skipped for reduced motion).
+  if ('IntersectionObserver' in window && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    var revealer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) { en.target.classList.add('in'); revealer.unobserve(en.target); }
+      });
+    }, { threshold: 0.12 });
+    document.querySelectorAll('.card,.step,.price-card,.art-list,.factors li,.faq-list details').forEach(function (el) {
+      el.classList.add('rv');
+      revealer.observe(el);
+    });
+  }
 
   // On a github.io address the page is a draft: say so, and keep it out of search results.
   if (/\.github\.io$/.test(location.hostname)) {

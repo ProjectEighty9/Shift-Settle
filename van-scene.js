@@ -10,7 +10,29 @@ if (host) {
     host.classList.add('is-failed');
     host.querySelector('.scene-status').textContent = 'The 3D view is not available on this device.';
   });
-  if ('IntersectionObserver' in window) {
+  // Phones, data-saver mode, slow connections and low-memory devices get a button instead of
+  // an automatic download of the 3D libraries and scanned assets (about 9 MB).
+  const conn = navigator.connection || {};
+  const heavy = !!conn.saveData
+    || /(^|-)(2g|3g)$/.test(conn.effectiveType || '')
+    || (navigator.deviceMemory && navigator.deviceMemory <= 2)
+    || (matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 700);
+
+  if (heavy) {
+    const status = host.querySelector('.scene-status');
+    status.textContent = '';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'scene-load';
+    btn.textContent = 'Load the 3D view';
+    const small = document.createElement('small');
+    small.textContent = 'About 9 MB. Best on Wi-Fi.';
+    btn.addEventListener('click', () => {
+      status.textContent = 'Loading the 3D view…';
+      start();
+    });
+    status.append(btn, small);
+  } else if ('IntersectionObserver' in window) {
     const io = new IntersectionObserver((entries) => {
       if (entries.some((e) => e.isIntersecting)) { io.disconnect(); start(); }
     }, { rootMargin: '500px' });
