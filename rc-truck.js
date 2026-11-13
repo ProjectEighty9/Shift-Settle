@@ -70,7 +70,7 @@ async function start() {
   // Phones and tablets: the canvas spans the whole screen width, the lap is centred and the truck keeps a
   // steady size on screen (about 75px long) whatever the width.
   let curve = null;
-  const walls = [0, 1].map(() => {
+  const walls = [0, 1, 2].map(() => { // left stack, right stack, the quote panel (wide screens)
     const m = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ colorWrite: false }));
     m.renderOrder = -1; m.visible = false; scene.add(m);
     return m;
@@ -89,14 +89,14 @@ async function start() {
   }
 
   // Stand an invisible wall where a crate stack stands (measured from the page). Returns where it is.
-  function placeWall(mesh, el, fl, fr, w, h) {
+  function placeWall(mesh, el, fl, fr, w, h, topFrac = 0.1) {
     mesh.visible = false;
     if (!el || getComputedStyle(el).display === 'none') return null;
     const mr = mount.getBoundingClientRect(), sr = el.getBoundingClientRect();
     if (!sr.width) return null;
     const B = sr.bottom - mr.top - 4;                                  // the stack's floor line, in canvas pixels
     const xl = sr.left - mr.left + sr.width * fl, xr = sr.left - mr.left + sr.width * fr;
-    const top = sr.top - mr.top + sr.height * 0.1;
+    const top = sr.top - mr.top + sr.height * topFrac;
     const a = groundAt(xl, B, w, h), b = groundAt(xr, B, w, h), m = groundAt((xl + xr) / 2, B, w, h);
     if (!a || !b || !m) return null;
     const height = Math.max(0.5, wallAt((xl + xr) / 2, top, w, h, m.z).y);
@@ -113,14 +113,16 @@ async function start() {
     const props = hero.querySelector('.props').getBoundingClientRect();
     const colL = props.left - mr.left;            // text column's left edge, in canvas pixels
     const { B, xl: sL, xr: sR } = info;
-    const N = B + 142, F = B + 82;                // front lane and far lane (rows the wheels touch)
-    const cx = (sL + sR) / 2, ex = 40;            // the stack's middle; the hidden U-turn is 2*ex wide, so the whole truck stays covered
+    const N = B + 150, F = B + 88;                // front lane and far lane (rows the wheels touch)
+    const cx = (sL + sR) / 2;                     // the stack's middle
     const px = [
-      [colL + 150, N], [colL + 30, N], [-40, N], [-120, (N + F) / 2], [-40, F],                                   // park, left along the front, off the screen, swing round
-      [colL + 60, F], [colL + 250, F], [sL - 70, F], [cx - ex - 30, F - 6], [cx - ex - 8, B + 45], [cx - ex, B - 10], // back in along the far lane, up into the stack
-      [cx - ex, B - 62], [cx - ex * 0.7, B - 90], [cx, B - 102], [cx + ex * 0.7, B - 90], [cx + ex, B - 62],      // the U-turn behind the crates
-      [cx + ex + 2, B - 10], [cx + ex + 6, B + 45], [cx + ex - 4, B + 100],                                      // straight out of the front
-      [cx + 10, N - 6], [cx - 60, N], [colL + 350, N], [colL + 250, N]                                           // right-to-left along the front, home
+      [colL + 150, N], [colL + 30, N], [-40, N], [-120, (N + F) / 2], [-40, F],                  // park, left along the front, off the left edge, swing round
+      [colL + 60, F], [colL + 250, F], [sL - 150, F],                                            // back in along the far lane, heading right
+      [sL - 100, F - 14], [sL - 55, B + 40], [sL - 22, B - 30], [sL + 15, B - 46],               // climb up behind the stack
+      [cx, B - 50],                                                                              // hidden behind the crates
+      [sR - 15, B - 46], [sR + 22, B - 28], [sR + 62, B + 30], [sR + 110, F - 14], [sR + 170, F], // out the far side and back down in front
+      [sR + 330, F], [w - 150, F], [w + 40, F], [w + 120, (N + F) / 2], [w + 40, N],             // on right across the page, off the right edge, swing round
+      [w - 150, N], [sR + 330, N], [cx + 120, N], [colL + 400, N], [colL + 250, N]               // right-to-left along the front, home
     ];
     const pts = px.map(([x, y]) => groundAt(x, y, w, h));
     if (pts.some((p) => !p)) return false;
@@ -134,7 +136,7 @@ async function start() {
   function fit() {
     const w = mount.clientWidth, h = mount.clientHeight;
     if (!w || !h) return false;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, lowEnd ? 1.75 : 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, lowEnd ? 1.75 : (w > 1400 ? 1.5 : 2)));
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
     const wide = wideQuery.matches;
@@ -152,6 +154,8 @@ async function start() {
     // walls where the crate stacks stand (the left one only exists on very wide screens and on phones)
     const infoR = placeWall(walls[1], hero.querySelector('.prop-r'), 0.01, 0.96, w, h);
     placeWall(walls[0], hero.querySelector('.prop-l'), 0.02, 0.84, w, h);
+    // on wide screens the yellow quote panel stands to the right: the truck drives behind it on the far lane
+    if (wide) placeWall(walls[2], document.getElementById('quote'), 0.0, 1.0, w, h, 0.0); else walls[2].visible = false;
     curve = null;
     if (wide && infoR && buildWideLoop(w, h, infoR)) {
       // measured route (above)
@@ -384,17 +388,17 @@ async function start() {
   // ---------- the lap ----------
   // The same trip on every layout. From its parking spot the truck drives LEFT along the front lane and
   // off the screen, swings round out of sight, comes back in from the left along the far lane BEHIND the
-  // crates all the way across to the right, swings round again and drives right-to-left along the front
-  // lane back to its parking spot. (Phones/tablets use the simple lanes below; wide screens use a route
-  // measured from the page, see buildWideLoop.)
+  // crates and on across the page to the other side, off the RIGHT edge, swings round out of sight again
+  // and drives right-to-left along the front lane back to its parking spot. (Phones/tablets use the
+  // simple lanes below; wide screens use a route measured from the page, see buildWideLoop.)
   const yawOf = (p) => Math.atan2(-p.tz, p.tx);
   const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
   let CYCLE = 16; const DWELL = 2.5;                 // seconds: parked for 2.5, then one lap (CYCLE follows the lap length)
-  const X_PARK = -1.4, X_OFF = -4.3, X_RIGHT = 1.2;   // parking spot, where it turns round off-screen left, where it turns at the right
+  const X_PARK = -1.4, X_OFF = -4.3, X_RIGHT = 3.6;   // parking spot, where it turns round off-screen left, where it turns round off-screen right
   let Z_NEAR = 0.5, Z_FAR = -0.7, ZC = -0.1, R = 0.6, L1 = 0, L3 = 0, L5 = 0, ARC = 0, LAP = 0;
-  function retime() { CYCLE = clamp(DWELL + LAP / 1.2, 14, 34); }
+  function retime() { CYCLE = clamp(DWELL + LAP / 1.5, 14, 40); }
   function setLane(zNear, zFar) {
     Z_NEAR = zNear; Z_FAR = zFar; ZC = (zNear + zFar) / 2; R = (zNear - zFar) / 2;
     L1 = X_PARK - X_OFF; L3 = X_RIGHT - X_OFF; L5 = X_RIGHT - X_PARK; ARC = Math.PI * R;
