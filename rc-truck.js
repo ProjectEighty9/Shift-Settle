@@ -113,16 +113,18 @@ async function start() {
     const props = hero.querySelector('.props').getBoundingClientRect();
     const colL = props.left - mr.left;            // text column's left edge, in canvas pixels
     const { B, xl: sL, xr: sR } = info;
-    const N = B + 150, F = B + 88;                // front lane and far lane (rows the wheels touch)
+    // Low lanes: under the quote panel the truck is IN FRONT of it, so keep it as low as the hero allows
+    // (the hero ends about 88px below the panel) so it only overlaps the panel's bottom edge.
+    const N = B + 168, F = B + 110;               // front lane and far lane (rows the wheels touch)
     const cx = (sL + sR) / 2;                     // the stack's middle
     const px = [
       [colL + 150, N], [colL + 30, N], [-40, N], [-120, (N + F) / 2], [-40, F],                  // park, left along the front, off the left edge, swing round
-      [colL + 60, F], [colL + 250, F], [sL - 150, F],                                            // back in along the far lane, heading right
-      [sL - 100, F - 14], [sL - 55, B + 40], [sL - 22, B - 30], [sL + 15, B - 46],               // climb up behind the stack
+      [colL + 60, F], [colL + 250, F], [sL - 210, F],                                            // back in along the far lane, heading right
+      [sL - 150, F - 18], [sL - 95, B + 60], [sL - 45, B - 20], [sL + 10, B - 46],               // climb up behind the stack
       [cx, B - 50],                                                                              // hidden behind the crates
-      [sR - 15, B - 46], [sR + 22, B - 28], [sR + 62, B + 30], [sR + 110, F - 14], [sR + 170, F], // out the far side and back down in front
-      [sR + 330, F], [w - 150, F], [w + 40, F], [w + 120, (N + F) / 2], [w + 40, N],             // on right across the page, off the right edge, swing round
-      [w - 150, N], [sR + 330, N], [cx + 120, N], [colL + 400, N], [colL + 250, N]               // right-to-left along the front, home
+      [sR - 15, B - 46], [sR + 30, B - 20], [sR + 80, B + 55], [sR + 140, F - 18], [sR + 210, F], // out the far side and back down in front
+      [sR + 360, F], [w - 150, F], [w + 40, F], [w + 120, (N + F) / 2], [w + 40, N],             // on right across the page, off the right edge, swing round
+      [w - 150, N], [sR + 360, N], [cx + 120, N], [colL + 400, N], [colL + 250, N]               // right-to-left along the front, home
     ];
     const pts = px.map(([x, y]) => groundAt(x, y, w, h));
     if (pts.some((p) => !p)) return false;
@@ -154,8 +156,7 @@ async function start() {
     // walls where the crate stacks stand (the left one only exists on very wide screens and on phones)
     const infoR = placeWall(walls[1], hero.querySelector('.prop-r'), 0.01, 0.96, w, h);
     placeWall(walls[0], hero.querySelector('.prop-l'), 0.02, 0.84, w, h);
-    // on wide screens the yellow quote panel stands to the right: the truck drives behind it on the far lane
-    if (wide) placeWall(walls[2], document.getElementById('quote'), 0.0, 1.0, w, h, 0.0); else walls[2].visible = false;
+    walls[2].visible = false; // (no wall for the quote panel: the truck drives in FRONT of it, not behind)
     curve = null;
     if (wide && infoR && buildWideLoop(w, h, infoR)) {
       // measured route (above)
