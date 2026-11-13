@@ -43,7 +43,7 @@ async function start() {
   try { await document.fonts.load('900 64px Archivo'); } catch (e) { /* fallback font is fine */ }
 
   // ---------- renderer, scene, camera ----------
-  const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'low-power' });
+  const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'low-power', preserveDrawingBuffer: frozenAt !== null || query.has('rc3ddebug') });
   renderer.setClearColor(0x000000, 0);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -63,14 +63,18 @@ async function start() {
   camera.position.copy(camPos);
   camera.lookAt(camTarget);
 
-  // Wide screens: the canvas reaches up to the right-hand crate stack. The route is laid out in canvas
-  // pixels measured from the page (see buildWideLoop), so it lines up at any width, and an invisible
-  // depth wall stands where the stack stands so the truck really drives behind it.
-  // Phones and tablets: the canvas spans the crates' row, so the lap is centred and the truck keeps a
+  // Both layouts: an invisible depth wall stands where each crate stack stands, so the truck really
+  // drives behind them (hidden exactly where a stack covers it) and in front of them when it is nearer.
+  // Wide screens: the canvas reaches from the screen's left edge to the right-hand crate stack, and the
+  // route is laid out in canvas pixels measured from the page (buildWideLoop), so it lines up at any width.
+  // Phones and tablets: the canvas spans the whole screen width, the lap is centred and the truck keeps a
   // steady size on screen (about 75px long) whatever the width.
-  let wideMode = false, curve = null;
-  const occluder = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ colorWrite: false }));
-  occluder.renderOrder = -1; occluder.visible = false; scene.add(occluder);
+  let curve = null;
+  const walls = [0, 1].map(() => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ colorWrite: false }));
+    m.renderOrder = -1; m.visible = false; scene.add(m);
+    return m;
+  });
   const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   function groundAt(px, py, w, h) { // canvas pixel -> point on the ground
     ndc.set((px / w) * 2 - 1, -(py / h) * 2 + 1);
@@ -84,38 +88,46 @@ async function start() {
     return o.clone().addScaledVector(d, (z - o.z) / d.z);
   }
 
-  function buildWideLoop(w, h) {
+  // Stand an invisible wall where a crate stack stands (measured from the page). Returns where it is.
+  function placeWall(mesh, el, fl, fr, w, h) {
+    mesh.visible = false;
+    if (!el || getComputedStyle(el).display === 'none') return null;
+    const mr = mount.getBoundingClientRect(), sr = el.getBoundingClientRect();
+    if (!sr.width) return null;
+    const B = sr.bottom - mr.top - 4;                                  // the stack's floor line, in canvas pixels
+    const xl = sr.left - mr.left + sr.width * fl, xr = sr.left - mr.left + sr.width * fr;
+    const top = sr.top - mr.top + sr.height * 0.1;
+    const a = groundAt(xl, B, w, h), b = groundAt(xr, B, w, h), m = groundAt((xl + xr) / 2, B, w, h);
+    if (!a || !b || !m) return null;
+    const height = Math.max(0.5, wallAt((xl + xr) / 2, top, w, h, m.z).y);
+    mesh.scale.set(b.x - a.x, height, 3);
+    mesh.position.set((a.x + b.x) / 2, height / 2, m.z - 1.5);
+    mesh.visible = true;
+    return { B, xl, xr, zS: m.z };
+  }
+
+  // Wide screens: the route in canvas pixels, unprojected onto the floor. Off the screen's left edge and
+  // back (far lane), up into the right-hand stack, a hidden U-turn, out of the front, right-to-left home.
+  function buildWideLoop(w, h, info) {
     const mr = mount.getBoundingClientRect();
     const props = hero.querySelector('.props').getBoundingClientRect();
-    const stackEl = hero.querySelector('.prop-r');
-    if (!stackEl || !mr.width) { curve = null; occluder.visible = false; return false; }
-    const sr = stackEl.getBoundingClientRect();
     const colL = props.left - mr.left;            // text column's left edge, in canvas pixels
-    const B = sr.bottom - mr.top - 4;             // the stack's floor line
-    const sL = sr.left - mr.left + 2, sR = sr.right - mr.left - 10; // its left and right edges
-    const stackTop = sr.top - mr.top + sr.height * 0.09;
-    const N = B + 142, F = B + 82;                // near lane and far lane (rows the wheels touch)
+    const { B, xl: sL, xr: sR } = info;
+    const N = B + 142, F = B + 82;                // front lane and far lane (rows the wheels touch)
     const cx = (sL + sR) / 2, ex = 40;            // the stack's middle; the hidden U-turn is 2*ex wide, so the whole truck stays covered
     const px = [
-      [sL - 50, N], [colL + 250, N], [colL + 95, N], [colL + 22, (N + F) / 2], [colL + 95, F], [colL + 250, F], // park, left along the front, U-turn, back along the far lane
-      [sL - 70, F], [cx - ex - 30, F - 6], [cx - ex - 8, B + 45], [cx - ex, B - 10],                          // right, then up into the stack
-      [cx - ex, B - 62], [cx - ex * 0.7, B - 90], [cx, B - 102], [cx + ex * 0.7, B - 90], [cx + ex, B - 62], // the U-turn behind the crates
-      [cx + ex + 2, B - 10], [cx + ex + 6, B + 45], [cx + ex - 4, B + 100],                                   // straight back out of the front
-      [cx + 10, N - 6], [cx - 60, N], [cx - 110, N]                                                           // and left onto the near lane to park
+      [colL + 150, N], [colL + 30, N], [-40, N], [-120, (N + F) / 2], [-40, F],                                   // park, left along the front, off the screen, swing round
+      [colL + 60, F], [colL + 250, F], [sL - 70, F], [cx - ex - 30, F - 6], [cx - ex - 8, B + 45], [cx - ex, B - 10], // back in along the far lane, up into the stack
+      [cx - ex, B - 62], [cx - ex * 0.7, B - 90], [cx, B - 102], [cx + ex * 0.7, B - 90], [cx + ex, B - 62],      // the U-turn behind the crates
+      [cx + ex + 2, B - 10], [cx + ex + 6, B + 45], [cx + ex - 4, B + 100],                                      // straight out of the front
+      [cx + 10, N - 6], [cx - 60, N], [colL + 350, N], [colL + 250, N]                                           // right-to-left along the front, home
     ];
     const pts = px.map(([x, y]) => groundAt(x, y, w, h));
-    if (pts.some((p) => !p)) { curve = null; occluder.visible = false; return false; }
+    if (pts.some((p) => !p)) return false;
     curve = new THREE.CatmullRomCurve3(pts, true, 'centripetal');
-    curve.arcLengthDivisions = 600;
+    curve.arcLengthDivisions = 800;
     LAP = curve.getLength();
-
-    // the invisible wall that hides the truck while it is behind the stack
-    const left = groundAt(sL, B, w, h), right = groundAt(sR, B, w, h);
-    const zS = groundAt((sL + sR) / 2, B, w, h).z;
-    const height = Math.max(0.6, wallAt((sL + sR) / 2, stackTop, w, h, zS).y);
-    occluder.scale.set(right.x - left.x, height, 3);
-    occluder.position.set((left.x + right.x) / 2, height / 2, zS - 1.5);
-    occluder.visible = true;
+    retime();
     return true;
   }
 
@@ -137,13 +149,16 @@ async function start() {
     camera.fov = 2 * Math.atan((halfWidth / camera.aspect) / dist) * 180 / Math.PI;
     camera.updateProjectionMatrix();
     camera.updateMatrixWorld(true);
-    wideMode = wide;
-    CYCLE = wide ? 22 : 16;
-    if (wide) {
-      if (!buildWideLoop(w, h)) { setLane(-0.5); }
+    // walls where the crate stacks stand (the left one only exists on very wide screens and on phones)
+    const infoR = placeWall(walls[1], hero.querySelector('.prop-r'), 0.01, 0.96, w, h);
+    placeWall(walls[0], hero.querySelector('.prop-l'), 0.02, 0.84, w, h);
+    curve = null;
+    if (wide && infoR && buildWideLoop(w, h, infoR)) {
+      // measured route (above)
+    } else if (infoR) {
+      setLane(infoR.zS + 0.6, infoR.zS - 1.2); // simple lanes: the far lane runs behind the stacks' floor line
     } else {
-      curve = null; occluder.visible = false;
-      if (Z_FAR !== -1.3) setLane(-1.3);
+      setLane(0.5, -0.7);
     }
     return true;
   }
@@ -366,38 +381,44 @@ async function start() {
   blob.position.y = 0.004;
   truck.add(blob);
 
-  // ---------- the lap: a racetrack (near lane out, U-turn, far lane back, U-turn) ----------
-  // The far lane's depth depends on the layout: on phones/tablets it runs deep BEHIND the crates
-  // (the truck vanishes behind each stack, shows in the gap between them, then swings back out in
-  // front of the teddy); beside the text on wide screens it stays shallow.
-  const X_PARK = 0.81, X_FAR = -1.85, Z_NEAR = 0.5;
-  let Z_FAR = -0.5, ZC = 0, R = 0.5, LEG = 0, ARC = 0, LAP = 0;
-  function setLane(zFar) {
-    Z_FAR = zFar; ZC = (Z_NEAR + Z_FAR) / 2; R = (Z_NEAR - Z_FAR) / 2;
-    LEG = X_PARK - X_FAR; ARC = Math.PI * R; LAP = 2 * LEG + 2 * ARC;
+  // ---------- the lap ----------
+  // The same trip on every layout. From its parking spot the truck drives LEFT along the front lane and
+  // off the screen, swings round out of sight, comes back in from the left along the far lane BEHIND the
+  // crates all the way across to the right, swings round again and drives right-to-left along the front
+  // lane back to its parking spot. (Phones/tablets use the simple lanes below; wide screens use a route
+  // measured from the page, see buildWideLoop.)
+  const yawOf = (p) => Math.atan2(-p.tz, p.tx);
+  const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+  let CYCLE = 16; const DWELL = 2.5;                 // seconds: parked for 2.5, then one lap (CYCLE follows the lap length)
+  const X_PARK = -1.4, X_OFF = -4.3, X_RIGHT = 1.2;   // parking spot, where it turns round off-screen left, where it turns at the right
+  let Z_NEAR = 0.5, Z_FAR = -0.7, ZC = -0.1, R = 0.6, L1 = 0, L3 = 0, L5 = 0, ARC = 0, LAP = 0;
+  function retime() { CYCLE = clamp(DWELL + LAP / 1.2, 14, 34); }
+  function setLane(zNear, zFar) {
+    Z_NEAR = zNear; Z_FAR = zFar; ZC = (zNear + zFar) / 2; R = (zNear - zFar) / 2;
+    L1 = X_PARK - X_OFF; L3 = X_RIGHT - X_OFF; L5 = X_RIGHT - X_PARK; ARC = Math.PI * R;
+    LAP = L1 + ARC + L3 + ARC + L5;
+    retime();
   }
-  setLane(-0.5);
+  setLane(0.5, -0.7);
   function pathAt(s) {
     s = ((s % LAP) + LAP) % LAP;
     if (curve) { // wide screens: the route measured from the page (buildWideLoop)
       const u = s / LAP, p = curve.getPointAt(u), t = curve.getTangentAt(u);
       return { x: p.x, z: p.z, tx: t.x, tz: t.z };
     }
-    if (s < LEG) return { x: X_PARK - s, z: Z_NEAR, tx: -1, tz: 0 };
-    s -= LEG;
-    if (s < ARC) { const f = s / R; return { x: X_FAR - R * Math.sin(f), z: ZC + R * Math.cos(f), tx: -Math.cos(f), tz: -Math.sin(f) }; }
+    if (s < L1) return { x: X_PARK - s, z: Z_NEAR, tx: -1, tz: 0 };           // away to the left along the front lane
+    s -= L1;
+    if (s < ARC) { const f = s / R; return { x: X_OFF - R * Math.sin(f), z: ZC + R * Math.cos(f), tx: -Math.cos(f), tz: -Math.sin(f) }; } // round, off-screen
     s -= ARC;
-    if (s < LEG) return { x: X_FAR + s, z: Z_FAR, tx: 1, tz: 0 };
-    s -= LEG;
-    const f = s / R;
-    return { x: X_PARK + R * Math.sin(f), z: ZC - R * Math.cos(f), tx: Math.cos(f), tz: Math.sin(f) };
+    if (s < L3) return { x: X_OFF + s, z: Z_FAR, tx: 1, tz: 0 };              // back in, behind the crates, all the way right
+    s -= L3;
+    if (s < ARC) { const f = s / R; return { x: X_RIGHT + R * Math.sin(f), z: ZC - R * Math.cos(f), tx: Math.cos(f), tz: Math.sin(f) }; } // round at the right
+    s -= ARC;
+    return { x: X_RIGHT - s, z: Z_NEAR, tx: -1, tz: 0 };                      // right-to-left along the front, back to the parking spot
   }
-  const yawOf = (p) => Math.atan2(-p.tz, p.tx);
-  const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
-  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
-  let CYCLE = 16; const DWELL = 2.5; // seconds: parked for 2.5, then one lap (CYCLE is longer on wide screens)
-  let behindNow = false;
   let cumPrev = 0, vel = 0, velPrev = 0, steer = 0, spinAngle = 0, aA = 0, aV = 0, aB = 0, aW = 0;
 
   function update(t, dt) {
@@ -414,10 +435,6 @@ async function start() {
     const curv = wrapAngle(yawOf(p2) - yaw) / 0.02; // + = turning left
     truck.position.set(p.x, 0, p.z);
     truck.rotation.y = yaw;
-    // the crates stand on the floor line (z = 0): on the far lane the truck is behind them, on the near lane in front
-    // (phones/tablets only; on wide screens the invisible depth wall does the hiding per pixel)
-    const behind = !wideMode && p.z < 0;
-    if (behind !== behindNow) { behindNow = behind; mount.classList.toggle('behind', behind); }
 
     const step = cum - cumPrev;
     cumPrev = cum;
@@ -450,10 +467,15 @@ async function start() {
   }
 
   // ---------- run ----------
-  let raf = 0, last = 0, t = 0, onScreen = true;
+  let raf = 0, last = 0, t = 0, onScreen = true, paused = false;
   const draw = () => renderer.render(scene, camera);
+  // test hook (?rc3ddebug): jump to any moment of the lap and hold there
+  if (query.has('rc3ddebug')) {
+    window.__rc3d = { seek(tt) { paused = true; hero.classList.add('has-3d'); update(tt, 0); draw(); return { CYCLE, LAP, x: truck.position.x, z: truck.position.z }; } };
+  }
   function frame(now) {
     raf = requestAnimationFrame(frame);
+    if (paused) return;
     if (!onScreen || document.hidden || !fit.ok) { last = now; return; }
     const dt = Math.min(0.05, (now - last) / 1000 || 0.016);
     last = now;
@@ -467,7 +489,7 @@ async function start() {
 
   if (frozenAt !== null && !Number.isNaN(frozenAt)) {
     update(frozenAt, 0);
-    if (fit.ok) draw();
+    if (fit.ok) { draw(); hero.classList.add('has-3d'); } // test hook: show the frame without waiting for animation frames
   } else if (reduceMotion) {
     update(0, 0);
     if (fit.ok) draw();
