@@ -14,16 +14,17 @@ const frozenAt = query.has('rc3dtime') ? parseFloat(query.get('rc3dtime')) : nul
 
 let started = false;
 
+// data-saver, slow connections and very low-memory phones keep the light SVG truck
 function isHeavy() {
   const conn = navigator.connection || {};
   return !!conn.saveData
     || /(^|-)(2g|3g)$/.test(conn.effectiveType || '')
-    || (navigator.deviceMemory && navigator.deviceMemory <= 2)
-    || (matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 700);
+    || !!(navigator.deviceMemory && navigator.deviceMemory <= 2);
 }
+const lowEnd = matchMedia('(pointer: coarse)').matches; // phones and tablets: lighter shadows, smaller pixel ratio
 
 function maybeStart() {
-  if (started || !mount || !wideQuery.matches || isHeavy()) return;
+  if (started || !mount || isHeavy()) return;
   started = true;
   const go = () => start().catch((err) => {
     console.error('RC truck 3D failed, keeping the SVG truck:', err);
@@ -32,7 +33,6 @@ function maybeStart() {
   if (window.requestIdleCallback) requestIdleCallback(go, { timeout: 2500 }); else setTimeout(go, 600);
 }
 maybeStart();
-wideQuery.addEventListener('change', maybeStart);
 
 async function start() {
   const [THREE, { RoundedBoxGeometry }, { RoomEnvironment }] = await Promise.all([
@@ -63,15 +63,23 @@ async function start() {
   camera.position.copy(camPos);
   camera.lookAt(camTarget);
 
-  const HALF_WIDTH = 3.0; // world units visible either side of the middle, whatever the canvas size
+  // Wide screens: the canvas sits beside the text and the lap is framed as designed (3 units either side).
+  // Phones and tablets: the canvas spans the crates' row, so the lap is centred and the truck keeps a
+  // steady size on screen (about 75px long) whatever the width.
   function fit() {
     const w = mount.clientWidth, h = mount.clientHeight;
     if (!w || !h) return false;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, lowEnd ? 1.75 : 2));
     renderer.setSize(w, h, false);
     camera.aspect = w / h;
+    const wide = wideQuery.matches;
+    const halfWidth = wide ? 3.0 : Math.max(2.3, Math.min(3.2, w * 0.0074));
+    const shiftX = wide ? 0 : -0.52;
+    camPos.x = shiftX; camTarget.x = shiftX;
+    camera.position.copy(camPos);
+    camera.lookAt(camTarget);
     const dist = camPos.distanceTo(camTarget);
-    camera.fov = 2 * Math.atan((HALF_WIDTH / camera.aspect) / dist) * 180 / Math.PI;
+    camera.fov = 2 * Math.atan((halfWidth / camera.aspect) / dist) * 180 / Math.PI;
     camera.updateProjectionMatrix();
     return true;
   }
@@ -81,7 +89,7 @@ async function start() {
   const sun = new THREE.DirectionalLight(0xffe3a8, 2.1);
   sun.position.set(-2.6, 4.4, 2.6);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(lowEnd ? 1024 : 2048, lowEnd ? 1024 : 2048);
   Object.assign(sun.shadow.camera, { left: -4.5, right: 4.5, top: 3.5, bottom: -3.5, near: 0.5, far: 14 });
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 0.02;
