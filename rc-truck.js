@@ -75,6 +75,8 @@ async function start() {
     const wide = wideQuery.matches;
     const halfWidth = wide ? 3.0 : Math.max(2.3, Math.min(3.2, w * 0.0074));
     const shiftX = wide ? 0 : -0.52;
+    const wantFar = wide ? -0.5 : -1.3;
+    if (wantFar !== Z_FAR) setLane(wantFar);
     camPos.x = shiftX; camTarget.x = shiftX;
     camera.position.copy(camPos);
     camera.lookAt(camTarget);
@@ -303,24 +305,33 @@ async function start() {
   truck.add(blob);
 
   // ---------- the lap: a racetrack (near lane out, U-turn, far lane back, U-turn) ----------
-  const X_PARK = 0.81, X_FAR = -1.85, Z_NEAR = 0.5, Z_FAR = -0.5, R = 0.5;
-  const LEG = X_PARK - X_FAR, ARC = Math.PI * R, LAP = 2 * LEG + 2 * ARC;
+  // The far lane's depth depends on the layout: on phones/tablets it runs deep BEHIND the crates
+  // (the truck vanishes behind each stack, shows in the gap between them, then swings back out in
+  // front of the teddy); beside the text on wide screens it stays shallow.
+  const X_PARK = 0.81, X_FAR = -1.85, Z_NEAR = 0.5;
+  let Z_FAR = -0.5, ZC = 0, R = 0.5, LEG = 0, ARC = 0, LAP = 0;
+  function setLane(zFar) {
+    Z_FAR = zFar; ZC = (Z_NEAR + Z_FAR) / 2; R = (Z_NEAR - Z_FAR) / 2;
+    LEG = X_PARK - X_FAR; ARC = Math.PI * R; LAP = 2 * LEG + 2 * ARC;
+  }
+  setLane(-0.5);
   function pathAt(s) {
     s = ((s % LAP) + LAP) % LAP;
     if (s < LEG) return { x: X_PARK - s, z: Z_NEAR, tx: -1, tz: 0 };
     s -= LEG;
-    if (s < ARC) { const f = s / R; return { x: X_FAR - R * Math.sin(f), z: R * Math.cos(f), tx: -Math.cos(f), tz: -Math.sin(f) }; }
+    if (s < ARC) { const f = s / R; return { x: X_FAR - R * Math.sin(f), z: ZC + R * Math.cos(f), tx: -Math.cos(f), tz: -Math.sin(f) }; }
     s -= ARC;
     if (s < LEG) return { x: X_FAR + s, z: Z_FAR, tx: 1, tz: 0 };
     s -= LEG;
     const f = s / R;
-    return { x: X_PARK + R * Math.sin(f), z: -R * Math.cos(f), tx: Math.cos(f), tz: Math.sin(f) };
+    return { x: X_PARK + R * Math.sin(f), z: ZC - R * Math.cos(f), tx: Math.cos(f), tz: Math.sin(f) };
   }
   const yawOf = (p) => Math.atan2(-p.tz, p.tx);
   const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
   const CYCLE = 16, DWELL = 2.5; // seconds: parked for 2.5, then one lap
+  let behindNow = false;
   let cumPrev = 0, vel = 0, velPrev = 0, steer = 0, spinAngle = 0, aA = 0, aV = 0, aB = 0, aW = 0;
 
   function update(t, dt) {
@@ -337,6 +348,9 @@ async function start() {
     const curv = wrapAngle(yawOf(p2) - yaw) / 0.02; // + = turning left
     truck.position.set(p.x, 0, p.z);
     truck.rotation.y = yaw;
+    // the crates stand on the floor line (z = 0): on the far lane the truck is behind them, on the near lane in front
+    const behind = p.z < 0;
+    if (behind !== behindNow) { behindNow = behind; mount.classList.toggle('behind', behind); }
 
     const step = cum - cumPrev;
     cumPrev = cum;

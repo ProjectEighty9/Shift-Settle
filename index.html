@@ -235,6 +235,7 @@ section[id],form[id]{scroll-margin-top:84px}
 .rc3d{display:block;visibility:hidden;position:absolute;left:0;right:0;bottom:-68px;height:150px;z-index:2;pointer-events:none}
 .rc3d canvas{display:block;width:100%;height:100%}
 .has-3d .rc3d{visibility:visible}
+.rc3d.behind{z-index:0} /* far lane: the truck drives behind the crates (they are z-index 1) */
 .has-3d .rc{display:none}
 .has-3d .props{margin-bottom:70px}
 /* wide screens: the stacks stand beside the text instead of under it */
@@ -1162,7 +1163,7 @@ section[id],form[id]{scroll-margin-top:84px}
 })();
 </script>
 <script src="proof.js" defer></script>
-<script type="module" src="rc-truck.js?v=7"></script>
+<script type="module" src="rc-truck.js?v=9"></script>
 <script type="module" src="van-scene.js"></script>
 </body>
 </html>
